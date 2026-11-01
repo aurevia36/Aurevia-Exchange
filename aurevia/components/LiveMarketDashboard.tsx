@@ -13,7 +13,7 @@ import {setMarketWatchlistUserScope,useMarketWatchlists} from '@/lib/market-watc
 
 type QuoteError={asset:NonNullable<ReturnType<typeof getMarketAsset>>;error:string};
 type QuotesResponse={quotes:Array<MarketQuote|QuoteError>;source:string};
-type HistoryResponse={quote:MarketQuote;candles:MarketCandle[];timeframe:TimeframeId;interval:string;source?:string};
+type HistoryResponse={quote:MarketQuote|null;candles:MarketCandle[];timeframe:TimeframeId;interval:string;source?:string};
 type ReturnMetric={label:string;days:number;value:number|null};
 type MarketAnalysis={summary:string;observations:Array<{symbol:string;observation:string}>;caveat:string};
 type MarketDataExplanation={symbol:string;dataType:'quote'|'history';status:'current_provider'|'stale_provider'|'internal_reference'|'unavailable';explanation:{explanation:string;recommendedAction:'refresh'|'configure_market_provider'|'try_later'|'contact_support';caveat:string}};
@@ -91,7 +91,7 @@ function LiveMarketDashboardContent(){
   const activeQuoteIsExternal=!!activeQuote&&isExternalMarketDataSource(activeQuote.source);
   const activeQuoteStatus=!activeQuote?'Unavailable':activeQuote.isStale?'Stale':activeQuoteIsExternal?'Live':'Internal reference';
   const activeQuoteSourceLabel=!activeQuote?'No provider quote':activeQuoteIsExternal?activeProvider||'External provider':'Aurevia Internal reference';
-  const historyNeedsExplanation=!historyQuery.isLoading&&(!historyQuery.data||!isExternalMarketDataSource(historyQuery.data.source||historyQuery.data.quote.source)||historyQuery.data.quote.isStale);
+  const historyNeedsExplanation=!historyQuery.isLoading&&(!historyQuery.data||!historyQuery.data.quote||!isExternalMarketDataSource(historyQuery.data.source||historyQuery.data.quote.source)||historyQuery.data.quote.isStale);
   const quoteNeedsExplanation=!selectedQuery.isLoading&&(!activeQuote||!activeQuoteIsExternal||activeQuote.isStale);
   const liveQuotes=[...batchQuotes.values()].filter((item):item is MarketQuote=>isQuote(item)&&!item.isStale);
   const gainers=[...liveQuotes].filter(item=>item.changePercent>0).sort((a,b)=>b.changePercent-a.changePercent).slice(0,3);
@@ -204,7 +204,7 @@ function LiveMarketDashboardContent(){
   }
 
   const filteredAssets=MARKET_ASSETS.filter(asset=>!activeList.symbols.includes(asset.id)&&`${asset.id} ${asset.name} ${asset.ticker}`.toLowerCase().includes(symbolSearch.toLowerCase())).slice(0,7);
-  const performance=returnMetrics(annualQuery.data?.candles||historyQuery.data?.candles||[],activeQuote);
+  const performance=returnMetrics(annualQuery.data?.candles||historyQuery.data?.candles||[],activeQuote||undefined);
   const todayRange=activeQuote?.dayLow!==null&&activeQuote?.dayLow!==undefined&&activeQuote?.dayHigh!==null&&activeQuote?.dayHigh!==undefined?activeQuote.dayHigh-activeQuote.dayLow:null;
   const todayPosition=todayRange&&activeQuote?.dayLow!==null&&activeQuote?.dayLow!==undefined?Math.max(0,Math.min(100,(activeQuote.price-activeQuote.dayLow)/todayRange*100)):50;
   const marketPulseAssets=MARKET_ASSETS.filter(asset=>marketCategory==='Favorites'
@@ -336,7 +336,7 @@ function LiveMarketDashboardContent(){
             </div>}
           </section>}
           <div className="live-timeframes" role="group" aria-label="Chart interval">{TIMEFRAMES.map(item=><button type="button" key={item.id} className={timeframe===item.id?'is-active':''} aria-pressed={timeframe===item.id} onClick={()=>setTimeframe(item.id)}>{item.label}</button>)}</div>
-          <LivePriceChart candles={historyQuery.data?.candles||[]} quote={activeQuote} timeframe={timeframe} loading={historyQuery.isLoading} error={historyQuery.error instanceof Error?historyQuery.error.message:''}/>
+          <LivePriceChart candles={historyQuery.data?.candles||[]} quote={activeQuote||undefined} timeframe={timeframe} loading={historyQuery.isLoading} error={historyQuery.error instanceof Error?historyQuery.error.message:''}/>
           {error&&<div className="live-data-alert" role="alert">The chart could not be updated. Available historical data is preserved. <button type="button" onClick={()=>void historyQuery.refetch()}>Retry</button></div>}
           <div className="live-chart-stats">
             <Metric label="Volume" value={activeQuote?.volume===null||activeQuote?.volume===undefined?'—':formatCompact(activeQuote.volume)}/>

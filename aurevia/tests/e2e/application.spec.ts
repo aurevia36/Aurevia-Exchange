@@ -25,8 +25,8 @@ const viewports=[
 	{width:1920,height:1080},
 ];
 
-const authenticatedRoutes=['/dashboard','/trade','/markets','/portfolio','/orders','/investments','/broadcasts','/wallet','/wallet/transactions','/kyc','/tier','/settings','/support','/notifications','/activity','/wallet/convert'];
-const adminRoutes=['/admin/login','/admin','/admin/users','/admin/content','/admin/stories','/admin/positions','/admin/settings','/admin/deleted-items','/admin/broadcasts','/admin/investments','/admin/payments','/admin/approved-deposits','/admin/approved-withdrawals','/admin/settlements','/admin/kyc','/admin/support','/admin/waitlist','/admin/providers','/admin/operations','/admin/receipts','/admin/nova','/admin/audit-logs','/admin/tiers','/admin/verified-accounts','/admin/markets'];
+const authenticatedRoutes=['/dashboard','/trade','/markets','/portfolio','/orders','/investments','/broadcasts','/wallet','/wallet/transactions','/wallet/convert','/kyc','/tier','/settings','/support','/notifications','/activity','/education','/news','/stories','/client-stories','/community','/cards','/cards/apply'];
+const adminRoutes=['/admin/login','/admin','/admin/activity','/admin/approved-deposits','/admin/approved-withdrawals','/admin/audit-logs','/admin/broadcasts','/admin/cards','/admin/command-center','/admin/community','/admin/content','/admin/deleted-items','/admin/investments','/admin/kyc','/admin/markets','/admin/nova','/admin/operations','/admin/payments','/admin/positions','/admin/providers','/admin/receipts','/admin/settings','/admin/settlements','/admin/stories','/admin/support','/admin/tax-services','/admin/tiers','/admin/users','/admin/verified-accounts','/admin/waitlist'];
 const appOrigin=process.env.AUREVIA_E2E_APP_URL||'http://127.0.0.1:4310';
 const providerOrigin=process.env.AUREVIA_E2E_PROVIDER_URL||'http://127.0.0.1:4311';
 
@@ -1711,6 +1711,19 @@ test('administrator email sign-in persists through refresh and logout removes ad
 	await expect(page).toHaveURL(/\/login/);
 	await page.goto('/admin');
 	await expect(page).toHaveURL(/\/login/);
+});
+
+test('account navigation exposes learning, news, activity, conversion, and Nova assistant',async({page})=>{
+	await loginAs(page,fixture('USER_EMAIL'),fixture('USER_PASSWORD'));
+	await page.getByRole('button',{name:'More account navigation'}).click();
+	const menu=page.getByRole('dialog',{name:'More'});
+	await expect(menu.getByRole('link',{name:'Investment education'})).toBeVisible();
+	await expect(menu.getByRole('link',{name:'News & updates'})).toBeVisible();
+	await expect(menu.getByRole('link',{name:'Account activity'})).toBeVisible();
+	await expect(menu.getByRole('link',{name:'Currency conversion'})).toBeVisible();
+	await menu.getByRole('link',{name:'AI Assistant'}).click();
+	await expect(page).toHaveURL(/\/support#nova$/);
+	await expect(page.locator('#nova')).toBeInViewport();
 });
 
 test('admin ledger adjustments update isolated DEMO and REAL accounts with audit and idempotency',async({page})=>{

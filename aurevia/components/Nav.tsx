@@ -3,7 +3,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import {useSession,signOut} from 'next-auth/react';
 import {usePathname,useRouter} from 'next/navigation';
-import {ArrowLeft,ArrowLeftRight,ArrowRight,Award,Bell,BriefcaseBusiness,ChartNoAxesCombined,CreditCard,FileText,HeartHandshake,History,House,LayoutDashboard,LineChart,LogOut,Mail,Menu,MoreHorizontal,PhoneCall,Radio,Search,Settings,ShieldCheck,Wallet,X} from 'lucide-react';
+import {ArrowLeft,ArrowLeftRight,ArrowRight,Award,Bell,BookOpen,Bot,BriefcaseBusiness,ChartNoAxesCombined,CreditCard,FileText,HeartHandshake,History,House,LayoutDashboard,LineChart,LogOut,Mail,Menu,MoreHorizontal,Newspaper,PhoneCall,Radio,Search,Settings,ShieldCheck,Wallet,X} from 'lucide-react';
 import {useEffect,useRef,useState} from 'react';
 import NotificationBell from '@/components/NotificationBell';
 import LanguageSelector from '@/components/LanguageSelector';
@@ -30,6 +30,7 @@ const moreMenuGroups=[
   {href:'/wallet?action=DEPOSIT',label:'Deposits',icon:ArrowRight},
   {href:'/wallet?action=WITHDRAWAL',label:'Withdrawals',icon:ArrowLeft},
   {href:'/wallet/transactions',label:'Transaction history',icon:FileText},
+  {href:'/wallet/convert',label:'Currency conversion',icon:ArrowLeftRight},
  ]},
  {title:'Updates & membership',links:[
   {href:'/notifications',label:'Notifications',icon:Bell},
@@ -38,6 +39,11 @@ const moreMenuGroups=[
   {href:'/client-stories',label:'Testimonials',icon:HeartHandshake},
   {href:'/community',label:'Community finance',icon:HeartHandshakeIcon},
  ]},
+ {title:'Learning & updates',links:[
+  {href:'/education',label:'Investment education',icon:BookOpen},
+  {href:'/news',label:'News & updates',icon:Newspaper},
+  {href:'/activity',label:'Account activity',icon:History},
+ ]},
  {title:'Account',links:[
   {href:'/kyc',label:'Identity verification / KYC',icon:ShieldCheck},
   {href:'/cards',label:'Digital cards',icon:CreditCard},
@@ -45,6 +51,7 @@ const moreMenuGroups=[
   {href:'/settings#security',label:'Security',icon:ShieldCheck},
  ]},
  {title:'Support',links:[
+  {href:'/support#nova',label:'AI Assistant',icon:Bot},
   {href:'/support',label:'Help and support',icon:Mail},
  ]},
 ];
@@ -73,17 +80,22 @@ export default function Nav(){
    {href:'/wallet?action=DEPOSIT',label:'Deposits',group:'Wallet & funding'},
    {href:'/wallet?action=WITHDRAWAL',label:'Withdrawals',group:'Wallet & funding'},
    {href:'/wallet/transactions',label:'Transaction history',group:'Wallet & funding'},
+   {href:'/wallet/convert',label:'Currency conversion',group:'Wallet & funding'},
    {href:'/notifications',label:'Notifications',group:'Account'},
    {href:'/tier',label:'Tier / membership',group:'Account'},
    {href:'/stories',label:'Stories',group:'Explore'},
    {href:'/client-stories',label:'Testimonials',group:'Explore'},
    {href:'/community',label:'Community finance',group:'Community'},
+   {href:'/education',label:'Investment education',group:'Explore'},
+   {href:'/news',label:'News & updates',group:'Explore'},
+   {href:'/activity',label:'Account activity',group:'Account'},
    {href:'/kyc',label:'Identity verification',group:'Account'},
    {href:'/cards',label:'Cards',group:'Account'},
    {href:'/tax-services',label:'Tax services',group:'Account'},
   {href:'/settings#profile',label:'Profile',group:'Profile & support'},
   {href:'/settings#security',label:'Settings',group:'Profile & support'},
   {href:'/support',label:'Help & support',group:'Profile & support'},
+  {href:'/support#nova',label:'AI Assistant',group:'Profile & support'},
  ];
  const currentMode=data?.user?.accountMode;
  const visibleDestinations=userDestinations.filter(item=>
