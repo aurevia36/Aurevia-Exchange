@@ -16,7 +16,7 @@ import DemoAiTradingPanel from '@/components/DemoAiTradingPanel';
 import DemoAccountControls from '@/components/DemoAccountControls';
 import AccountTierBadge from '@/components/AccountTierBadge';
 import {useAccountTier} from '@/components/useAccountTier';
-import {DEFAULT_WATCHLIST,MARKET_ASSETS,type MarketCandle,type MarketQuote,type TimeframeId} from '@/lib/live-market';
+import {DEFAULT_WATCHLIST,MARKET_ASSETS,MARKET_UI_REFRESH_INTERVAL_MS,type MarketCandle,type MarketQuote,type TimeframeId} from '@/lib/live-market';
 import {formatUsd} from '@/lib/currency-format';
 
 type Overview={
@@ -219,7 +219,7 @@ export default function UserDashboardExperience(){
 		};
 		refreshQuotesRef.current=refresh;
 		void refresh();
-		const timer=window.setInterval(()=>void refresh(),30_000);
+		const timer=window.setInterval(()=>void refresh(),MARKET_UI_REFRESH_INTERVAL_MS);
 		return()=>{active=false;refreshQuotesRef.current=async()=>{};window.clearInterval(timer)};
 	},[overview?.internalMarketInstruments]);
 

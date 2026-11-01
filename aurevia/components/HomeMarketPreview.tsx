@@ -3,8 +3,11 @@
 import {useEffect,useRef,useState} from 'react';
 import PriceChart from '@/components/PriceChart';
 import {useLocale} from '@/lib/i18n-context';
+import {MARKET_UI_REFRESH_INTERVAL_MS} from '@/lib/live-market';
 
 type MarketItem={id:string;symbol:string;name:string;price:number;change?:number};
+
+type LiveQuotePayload={asset:{id:string;name:string;currency:string};price:number;changePercent:number;updatedAt:string;source:string;isStale?:boolean};
 
 export default function HomeMarketPreview(){
   const {translate}=useLocale();
@@ -20,19 +23,27 @@ export default function HomeMarketPreview(){
     let active=true;
     async function refresh(){
       try{
-        const response=await fetch('/api/market',{cache:'no-store'});
-        if(!response.ok)throw new Error('Market data unavailable');
-        const data=await response.json() as MarketItem[];
+        const symbols=['DJI','SPX','NASDAQ','BTC','AAPL','MSFT','NVDA','AMZN','GOOGL','TSLA','EURGBP'].join(',');
+        const response=await fetch(`/api/live-markets?symbols=${encodeURIComponent(symbols)}`,{cache:'no-store'});
+        const payload=await response.json() as {quotes?:LiveQuotePayload[];marketDataStatus?:string;source?:string};
+        const liveQuotes=(payload.quotes??[]).filter((item):item is LiveQuotePayload=>Boolean(item)&&typeof item.price==='number'&&typeof item.asset?.id==='string');
+        if(!response.ok||!liveQuotes.length)throw new Error('Market data unavailable');
         if(!active)return;
-        const normalized=data.map(item=>({...item,price:Number(item.price)}));
+        const normalized=liveQuotes.map(item=>({
+          id:item.asset.id,
+          symbol:item.asset.id,
+          name:item.asset.name||item.asset.id,
+          price:Number(item.price),
+          change:Number(item.changePercent)/100,
+        }));
         setMarkets(normalized);
-        setSelected(current=>current||normalized.find(item=>item.symbol==='BTC/USD')?.id||normalized[0]?.id||'');
+        setSelected(current=>current||normalized.find(item=>item.symbol==='BTC')?.id||normalized[0]?.id||'');
         setStatus('ready');
         setUpdatedAt(Date.now());
       }catch{if(active)setStatus(current=>current==='ready'?current:'error')}
     }
     void refresh();
-    const timer=window.setInterval(()=>void refresh(),4_000);
+    const timer=window.setInterval(()=>void refresh(),MARKET_UI_REFRESH_INTERVAL_MS);
     return()=>{active=false;window.clearInterval(timer)};
   },[]);
 

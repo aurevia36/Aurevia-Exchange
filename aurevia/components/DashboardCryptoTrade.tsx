@@ -3,6 +3,7 @@
 import {FormEvent,useCallback,useEffect,useMemo,useState} from 'react';
 import {ArrowDownRight,ArrowUpRight,LoaderCircle,RefreshCw,TrendingUp} from 'lucide-react';
 import {formatUsd} from '@/lib/currency-format';
+import {MARKET_UI_REFRESH_INTERVAL_MS} from '@/lib/live-market';
 
 type CryptoInstrument={id:string;symbol:string;name:string;baseAsset:string;quoteAsset:string;price:number|string;takerFee:number|string;updatedAt:string;lastUpdatedAt?:string};
 type CryptoPosition={side:string;quantity:number|string;instrument:{id:string}};
@@ -37,7 +38,7 @@ export default function DashboardCryptoTrade({accountMode,cash,onTradeComplete}:
 
  useEffect(()=>{
   void load();
-  const timer=window.setInterval(()=>void load(),4_000);
+  const timer=window.setInterval(()=>void load(),MARKET_UI_REFRESH_INTERVAL_MS);
   return()=>window.clearInterval(timer);
  },[load]);
 

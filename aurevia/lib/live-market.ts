@@ -80,6 +80,7 @@ export const TIMEFRAMES = [
 ] as const;
 
 export type TimeframeId = (typeof TIMEFRAMES)[number]['id'];
+export const MARKET_UI_REFRESH_INTERVAL_MS=1_000;
 
 type Cached<T> = {expiresAt:number;promise:Promise<T>};
 const quoteCache = new Map<string,Cached<MarketQuote>>();

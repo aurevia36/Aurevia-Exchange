@@ -7,6 +7,7 @@ import {Activity,ArrowUpRight,RefreshCw,Star} from 'lucide-react';
 import Nav from '@/components/Nav';
 import PriceChart from '@/components/PriceChart';
 import {useLocale} from '@/lib/i18n-context';
+import {MARKET_UI_REFRESH_INTERVAL_MS} from '@/lib/live-market';
 
 type Instrument={id:string;symbol:string;name:string;baseAsset:string;quoteAsset:string;price:string|number;change?:number;source:string;dataMode:'SIMULATED'|'LIVE';marketStatus:string;lastUpdatedAt:string};
 type ActivityItem={id:string;instrument:string;symbol?:string;side:'BUY'|'SELL';quantity:string|number;price:string|number;timestamp:string;createdAt?:string;accountMode:'DEMO'|'REAL';status:string};
@@ -70,7 +71,7 @@ export default function MarketExperience(){
 			finally{if(active&&showLoading)setLoading(false)}
 		}
 		void refresh(true);
-		const poll=window.setInterval(()=>{void refresh()},15000);
+		const poll=window.setInterval(()=>{void refresh()},MARKET_UI_REFRESH_INTERVAL_MS);
 		return()=>{active=false;window.clearInterval(poll)};
 	},[sessionStatus,isReal,retryCount]);
 

@@ -2,8 +2,11 @@
 
 import {useEffect,useState} from 'react';
 import {useLocale} from '@/lib/i18n-context';
+import {MARKET_UI_REFRESH_INTERVAL_MS} from '@/lib/live-market';
 
 type TickerItem={id:string;symbol:string;price:number;change?:number};
+
+type LiveQuotePayload={asset:{id:string;name:string};price:number;changePercent:number};
 
 export default function HomeMarketTicker(){
   const {translate}=useLocale();
@@ -14,16 +17,18 @@ export default function HomeMarketTicker(){
     let active=true;
     async function refresh(){
       try{
-        const response=await fetch('/api/market',{cache:'no-store'});
-        if(!response.ok)throw new Error('Market feed unavailable');
-        const data=await response.json() as TickerItem[];
+        const symbols=['DJI','SPX','NASDAQ','BTC','AAPL','MSFT','NVDA','AMZN','GOOGL','TSLA','EURGBP'].join(',');
+        const response=await fetch(`/api/live-markets?symbols=${encodeURIComponent(symbols)}`,{cache:'no-store'});
+        const payload=await response.json() as {quotes?:LiveQuotePayload[]};
+        const quotes=(payload.quotes??[]).filter((item):item is LiveQuotePayload=>Boolean(item)&&typeof item.price==='number'&&typeof item.asset?.id==='string');
+        if(!response.ok||!quotes.length)throw new Error('Market feed unavailable');
         if(!active)return;
-        setItems(data.slice(0,8).map(item=>({...item,price:Number(item.price)})));
+        setItems(quotes.slice(0,8).map(item=>({id:item.asset.id,symbol:item.asset.id,price:Number(item.price),change:Number(item.changePercent)/100})));
         setStatus('ready');
       }catch{if(active)setStatus(current=>current==='ready'?current:'unavailable')}
     }
     void refresh();
-    const timer=window.setInterval(()=>void refresh(),4_000);
+    const timer=window.setInterval(()=>void refresh(),MARKET_UI_REFRESH_INTERVAL_MS);
     return()=>{active=false;window.clearInterval(timer)};
   },[]);
 
