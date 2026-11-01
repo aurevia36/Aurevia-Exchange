@@ -15,10 +15,10 @@ export async function POST(request:Request){
 		const admin=await requireAdmin();
 		rateLimit(`admin-ai-draft:${admin.id}`,30,60_000);
 		const input=schema.parse(await request.json());
-		const {enabled,model}=getOpenAiConfig();
+		const {enabled,model}=await getOpenAiConfig();
 		if(!enabled){
 			return NextResponse.json({
-				error:'OpenAI is not configured. Set OPENAI_API_KEY on the server.',
+				 error:'AI is not configured. Set OPENROUTER_API_KEY on the server.',
 				enabled:false,
 			},{status:503,headers:{'Cache-Control':'private, no-store'}});
 		}
@@ -26,7 +26,7 @@ export async function POST(request:Request){
 		const draft=await openAiChat([
 			{role:'system',content:ADMIN_DRAFT_SYSTEM_PROMPT},
 			{role:'user',content:`Purpose: ${input.purpose}. ${tone}\n\nContext from administrator:\n${input.context}`},
-		],{temperature:0.35,maxTokens:600});
+		],{temperature:0.35,maxTokens:600,service:'administrative_assistance',actorId:admin.id});
 		if(!draft){
 			return NextResponse.json({error:'Unable to generate a draft right now.',enabled:true,model},{status:502,headers:{'Cache-Control':'private, no-store'}});
 		}

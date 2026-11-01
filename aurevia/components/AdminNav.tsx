@@ -5,7 +5,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import {signOut,useSession} from 'next-auth/react';
 import {usePathname,useRouter,useSearchParams} from 'next/navigation';
-import {Activity,ArrowLeft,ArrowRight,BadgeCheck,Bell,BriefcaseBusiness,Building2,ClipboardCheck,CreditCard,FileCheck2,Handshake,LayoutDashboard,LogOut,Menu,MessageSquareText,Radio,ReceiptText,Search,Settings2,ShieldCheck,SlidersHorizontal,Trash2,UsersRound,X} from 'lucide-react';
+import {Activity,ArrowLeft,ArrowRight,BadgeCheck,Bell,BriefcaseBusiness,Building2,ClipboardCheck,CreditCard,FileCheck2,Handshake,LayoutDashboard,LogOut,Menu,MessageSquareText,Radio,ReceiptText,Search,Settings2,ShieldCheck,SlidersHorizontal,Sparkles,Trash2,UsersRound,X} from 'lucide-react';
 import ProfileAvatar from '@/components/ProfileAvatar';
 import ThemeToggle from '@/components/ThemeToggle';
 
@@ -45,6 +45,7 @@ const groups=[
 		{href:'/admin/receipts',label:'Receipt review',icon:ReceiptText},
 	]},
 	{title:'System',links:[
+		{href:'/admin/command-center',label:'AI & API command center',icon:Sparkles},
 		{href:'/admin/activity',label:'Activity Management',icon:Activity},
 		{href:'/admin/audit-logs',label:'Notifications & audit',icon:Bell},
 		{href:'/admin/settings',label:'Settings',icon:SlidersHorizontal},

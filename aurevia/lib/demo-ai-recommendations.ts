@@ -31,7 +31,7 @@ export async function getDemoAiRecommendations(userId:string){
 	if(!activeUser||activeUser.status!=='ACTIVE')throw new Error('ACCOUNT_UNAVAILABLE');
 	if(activeUser.accountMode!==AccountMode.DEMO)throw new Error('DEMO_MODE_REQUIRED');
 	const config=getDemoAiConfig();
-	const aiConfig=getOpenAiConfig();
+	const aiConfig=await getOpenAiConfig();
 	if(!config.enabled)return {status:'disabled' as const,message:'AI recommendations are disabled by server configuration.',evaluationIntervalSeconds:config.evaluationIntervalSeconds,recommendations:[]};
 	if(!aiConfig.enabled)throw new Error('AI_PROVIDER_NOT_CONFIGURED');
 
@@ -68,7 +68,7 @@ export async function getDemoAiRecommendations(userId:string){
 	const content=await openAiChat([
 		{role:'system',content:'You generate DEMO trading recommendations only, never execute trades. Select at most one candidate from the provided JSON or return {"instrumentId":"","action":"HOLD","rationale":"No suitable signal."}. Return one JSON object with instrumentId, action (BUY or SELL), rationale. Never invent prices, instruments, position sizes, or guarantees. Cite the strategy and observed momentum in a concise factual rationale.'},
 		{role:'user',content:JSON.stringify({mode:'DEMO',simulationOnly:true,candidates:candidates.slice(0,40).map(({availableQuantity,...candidate})=>({ ...candidate,heldQuantity:availableQuantity??null})),risk:{riskPerTrade:config.riskPerTrade,maxPositionUsd:config.maxPositionUsd,stopLossPercent:config.stopLossPercent,takeProfitPercent:config.takeProfitPercent}})},
-	],{temperature:0.1,maxTokens:220});
+	],{temperature:0.1,maxTokens:220,service:'operational_recommendations',actorId:userId});
 	if(!content)throw new Error('AI_RECOMMENDATION_UNAVAILABLE');
 	let decision:{instrumentId:string;action:string;rationale:string};
 	try{decision=parseDecision(content)}catch{throw new Error('AI_RECOMMENDATION_INVALID');}

@@ -63,13 +63,13 @@ export async function POST(request:Request){
 		const admin=await requireAdmin();
 		rateLimit(`admin-dashboard-assistant:${admin.id}`,20,60_000);
 		const {question}=requestSchema.parse(await request.json());
-		const {enabled,model}=getOpenAiConfig();
-		if(!enabled)return NextResponse.json({error:'OpenAI is not configured. Set OPENAI_API_KEY on the server.'},{status:503,headers:{'Cache-Control':'private, no-store'}});
+		const {enabled,model}=await getOpenAiConfig();
+		if(!enabled)return NextResponse.json({error:'AI is not configured. Set OPENROUTER_API_KEY on the server.'},{status:503,headers:{'Cache-Control':'private, no-store'}});
 
 		const output=await openAiChat([
 			{role:'system',content:SYSTEM_PROMPT},
 			{role:'user',content:question},
-		],{temperature:0.1,maxTokens:800});
+		],{temperature:0.1,maxTokens:800,service:'administrative_assistance',actorId:admin.id});
 		if(!output)return NextResponse.json({error:'The dashboard assistant is temporarily unavailable.'},{status:502,headers:{'Cache-Control':'private, no-store'}});
 
 		let parsed:unknown;

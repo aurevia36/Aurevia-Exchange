@@ -72,15 +72,15 @@ export async function POST(){
 	try{
 		const admin=await requireAdmin();
 		rateLimit(`admin-market-review:${admin.id}`,10,60_000);
-		const {enabled,model}=getOpenAiConfig();
-		if(!enabled)return NextResponse.json({error:'AI is not configured. Set OPENAI_API_KEY on the server.'},{status:503,headers:{'Cache-Control':'private, no-store'}});
+		const {enabled,model}=await getOpenAiConfig();
+		if(!enabled)return NextResponse.json({error:'AI is not configured. Set OPENROUTER_API_KEY on the server.'},{status:503,headers:{'Cache-Control':'private, no-store'}});
 		const data=await getMarketReviewData();
 		const output=await openAiChat([
 			{role:'system',content:`Review the supplied Aurevia market snapshot and activity records.
 Return only JSON: {"summary":"string","highlights":[{"activityId":"one supplied activity id","observation":"string"}]}.
 Use only facts explicitly present in the supplied snapshot. Do not invent market moves, events, causes, or activity. Do not forecast, give trading advice, or describe simulated marks as live quotes. If there are no activity records, say so and return an empty highlights array. Any highlight must refer to an activityId present in the supplied records. Keep the summary concise and neutral.`},
 			{role:'user',content:JSON.stringify(data)},
-		],{temperature:0.1,maxTokens:500});
+		],{temperature:0.1,maxTokens:500,service:'market_information_summary'});
 		if(!output)return NextResponse.json({error:'AI market review is temporarily unavailable.'},{status:502,headers:{'Cache-Control':'private, no-store'}});
 		let parsed:unknown;
 		try{parsed=JSON.parse(output)}

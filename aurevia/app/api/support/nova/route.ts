@@ -224,7 +224,7 @@ export async function POST(request:Request){
 			const ai=await openAiChat([
 				{role:'system',content:NOVA_SYSTEM_PROMPT},
 				{role:'user',content:input.question},
-			],{temperature:0.3,maxTokens:500});
+			],{temperature:0.3,maxTokens:500,service:'customer_support',actorId:userId||undefined});
 			aiAssisted=Boolean(ai);
 			answer=ai||(/\b(support|contact|email)\b/i.test(input.question)?`Official Aurevia support email: ${contact.email}. You can also create a private support ticket from this page.`:/\b(deposit|payment|bitcoin|bank)\b/i.test(input.question)?'Open Wallet to submit an internal deposit or withdrawal request for administrator review.':/\b(real|demo|trade|order)\b/i.test(input.question)?'DEMO and REAL use separate account ledgers. Market data availability is separate. Nova cannot submit orders.':'I can explain platform workflows and common investing terms. For account-specific questions, sign in. I do not execute trades or confirm payments.');
 		}

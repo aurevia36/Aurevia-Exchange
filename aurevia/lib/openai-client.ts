@@ -1,39 +1,17 @@
-/**
- * Server-only OpenAI helper.
- * Set OPENAI_API_KEY and optional OPENAI_MODEL in environment (never NEXT_PUBLIC_*).
- */
+import {getAiEngineStatus} from '@/lib/ai-gateway';
+import {runAiService,type AiServiceName} from '@/lib/ai-services';
+
 export type OpenAiChatMessage={role:'system'|'user'|'assistant';content:string};
 
-export function getOpenAiConfig(){
-	const apiKey=process.env.OPENAI_API_KEY?.trim()||'';
-	const model=process.env.OPENAI_MODEL?.trim()||'gpt-4o-mini';
-	return {apiKey,model,enabled:Boolean(apiKey)};
+export async function getOpenAiConfig(){
+	const status=await getAiEngineStatus();
+	const active=status.providers.find(provider=>provider.status==='CONNECTED');
+	return {apiKey:'',model:active?.model||status.configuredModel,enabled:Boolean(active)};
 }
 
-export async function openAiChat(messages:OpenAiChatMessage[],options?:{temperature?:number;maxTokens?:number}){
-	const {apiKey,model,enabled}=getOpenAiConfig();
-	if(!enabled)return null;
-	const response=await fetch('https://api.openai.com/v1/chat/completions',{
-		method:'POST',
-		headers:{
-			'content-type':'application/json',
-			authorization:`Bearer ${apiKey}`,
-		},
-		body:JSON.stringify({
-			model,
-			messages,
-			temperature:options?.temperature??0.4,
-			max_tokens:options?.maxTokens??700,
-		}),
-	});
-	if(!response.ok){
-		const text=await response.text().catch(()=>'');
-		console.error('OpenAI request failed',response.status,text.slice(0,200));
-		return null;
-	}
-	const data=await response.json() as {choices?:Array<{message?:{content?:string}}>};
-	const content=data.choices?.[0]?.message?.content?.trim();
-	return content||null;
+export async function openAiChat(messages:OpenAiChatMessage[],options?:{temperature?:number;maxTokens?:number;service?:AiServiceName;actorId?:string}){
+	try{return (await runAiService(options?.service||'platform_help',messages,options)).content;}
+	catch{return null;}
 }
 
 export const NOVA_SYSTEM_PROMPT=`You are Nova, Aurevia Exchange platform support assistant.
