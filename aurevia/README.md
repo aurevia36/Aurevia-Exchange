@@ -70,7 +70,7 @@ Anonymous views use a random, HTTP-only visitor cookie whose value is hashed bef
 
 ### Live market dashboard
 
-The `/markets` page uses server-only Finnhub or Alpaca data when configured and current. When external data is unavailable, the informational market view can fall back to clearly labeled Aurevia Internal reference prices and generated reference history; it does not present those values as live provider data. Selected quotes refresh every five seconds and watchlists every 30 seconds. This informational view is separate from paper-order execution.
+The `/markets` page uses server-only Finnhub or Alpaca data when configured and current. When external data is unavailable, the informational market view can fall back to clearly labeled Aurevia Internal reference prices and generated reference history; it does not present those values as live provider data. Signed-in users can ask the centralized AI service to explain a quote or history source status; only the verified symbol, timeframe, source class, and provider label are sent, never prices, account records, credentials, or raw provider errors. This explanation does not create or estimate market data. Selected quotes refresh every five seconds and watchlists every 30 seconds. This informational view is separate from paper-order execution.
 
 REAL trade quotes and portfolio marks are provider-only: the internal fallback is not eligible for REAL order submission or REAL valuation. The trade screen displays the available best bid/ask as market quotes, not as Level 2 market depth; feeds without bid/ask data report those fields as unavailable. The quote timestamp and provider are shown, stale quotes cannot be used to submit orders, and provider-confirmed execution remains authoritative.
 

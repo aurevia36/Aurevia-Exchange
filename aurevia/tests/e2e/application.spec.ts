@@ -232,6 +232,38 @@ test('market view labels internal reference prices when no live provider is conf
 	await expect(page.getByText('AUREVIA INTERNAL REFERENCE DATA')).toBeVisible();
 });
 
+test('signed-in users can ask AI to explain unavailable quote and history sources without substituting data',async({page})=>{
+	await loginAs(page,fixture('USER_EMAIL'),fixture('USER_PASSWORD'));
+	await page.goto('/markets');
+	const quoteExplanation=page.getByRole('button',{name:'Explain quote availability'});
+	await expect(quoteExplanation).toBeVisible();
+	const requests:Array<{symbol:string;dataType:string;timeframe?:string}>=[];
+	await page.route('**/api/market/data-explanation',async route=>{
+		const payload=route.request().postDataJSON() as {symbol:string;dataType:'quote'|'history';timeframe?:string};
+		requests.push(payload);
+		await route.fulfill({json:{
+			symbol:payload.symbol,
+			dataType:payload.dataType,
+			status:'internal_reference',
+			explanation:{
+				explanation:'Only internal reference data is currently available.',
+				recommendedAction:'configure_market_provider',
+				caveat:'This AI explanation does not provide live market data or investment advice.',
+			},
+		}});
+	});
+
+	await quoteExplanation.click();
+	await expect(page.getByText('Only internal reference data is currently available.')).toBeVisible();
+	const historyExplanation=page.getByRole('button',{name:'Explain chart history'});
+	await expect(historyExplanation).toBeVisible();
+	await historyExplanation.click();
+	await expect(page.getByText('This AI explanation does not provide live market data or investment advice.')).toBeVisible();
+	expect(requests).toHaveLength(2);
+	expect(requests.map(request=>request.dataType)).toEqual(['quote','history']);
+	expect(requests.every(request=>request.symbol==='DJI')).toBe(true);
+});
+
 test('portfolio timeframe controls filter authenticated snapshot history accessibly on mobile',async({page})=>{
 	await page.setViewportSize({width:320,height:800});
 	await loginAs(page,fixture('LEGACY_USER_EMAIL'),fixture('LEGACY_USER_PASSWORD'));

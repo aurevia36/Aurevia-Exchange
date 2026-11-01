@@ -1,6 +1,6 @@
 'use client';
 
-import {useEffect,useMemo,useState} from 'react';
+import {useEffect,useMemo,useRef,useState} from 'react';
 import {useSearchParams} from 'next/navigation';
 import {QueryClient,QueryClientProvider,useQuery} from '@tanstack/react-query';
 import {useSession} from 'next-auth/react';
@@ -16,6 +16,7 @@ type QuotesResponse={quotes:Array<MarketQuote|QuoteError>;source:string};
 type HistoryResponse={quote:MarketQuote;candles:MarketCandle[];timeframe:TimeframeId;interval:string;source?:string};
 type ReturnMetric={label:string;days:number;value:number|null};
 type MarketAnalysis={summary:string;observations:Array<{symbol:string;observation:string}>;caveat:string};
+type MarketDataExplanation={symbol:string;dataType:'quote'|'history';status:'current_provider'|'stale_provider'|'internal_reference'|'unavailable';explanation:{explanation:string;recommendedAction:'refresh'|'configure_market_provider'|'try_later'|'contact_support';caveat:string}};
 type MarketCategory='Favorites'|'Forex'|'Crypto'|'Stocks'|'Indices';
 
 const TICKER_SYMBOLS=['BTC','DJI','MERV','DAX','IBEX','NIKKEI','EURGBP','SPX','NASDAQ'];
@@ -56,6 +57,10 @@ function LiveMarketDashboardContent(){
   const [marketAnalysisSources,setMarketAnalysisSources]=useState<Array<{symbol:string;name:string;provider:string;quotedAt:string}>>([]);
   const [marketAnalysisError,setMarketAnalysisError]=useState('');
   const [marketAnalysisBusy,setMarketAnalysisBusy]=useState(false);
+  const [dataExplanation,setDataExplanation]=useState<MarketDataExplanation|null>(null);
+  const [dataExplanationError,setDataExplanationError]=useState('');
+  const [explainingDataType,setExplainingDataType]=useState<'quote'|'history'|null>(null);
+  const dataExplanationRequest=useRef<AbortController|null>(null);
   const activeList=watchlists.find(list=>list.id===activeWatchlistId)||watchlists[0];
   const selectedAsset=getMarketAsset(selectedSymbol)||getMarketAsset('DJI')!;
   const quoteIds=Array.from(new Set([...activeList.symbols,...DEFAULT_WATCHLIST,...COMPARISON_SYMBOLS,selectedAsset.id]));
@@ -86,12 +91,22 @@ function LiveMarketDashboardContent(){
   const activeQuoteIsExternal=!!activeQuote&&isExternalMarketDataSource(activeQuote.source);
   const activeQuoteStatus=!activeQuote?'Unavailable':activeQuote.isStale?'Stale':activeQuoteIsExternal?'Live':'Internal reference';
   const activeQuoteSourceLabel=!activeQuote?'No provider quote':activeQuoteIsExternal?activeProvider||'External provider':'Aurevia Internal reference';
+  const historyNeedsExplanation=!historyQuery.isLoading&&(!historyQuery.data||!isExternalMarketDataSource(historyQuery.data.source||historyQuery.data.quote.source)||historyQuery.data.quote.isStale);
+  const quoteNeedsExplanation=!selectedQuery.isLoading&&(!activeQuote||!activeQuoteIsExternal||activeQuote.isStale);
   const liveQuotes=[...batchQuotes.values()].filter((item):item is MarketQuote=>isQuote(item)&&!item.isStale);
   const gainers=[...liveQuotes].filter(item=>item.changePercent>0).sort((a,b)=>b.changePercent-a.changePercent).slice(0,3);
   const losers=[...liveQuotes].filter(item=>item.changePercent<0).sort((a,b)=>a.changePercent-b.changePercent).slice(0,3);
 
   useEffect(()=>{if(!getMarketAsset(selectedSymbol))selectSymbol('DJI')},[selectedSymbol,selectSymbol]);
   useEffect(()=>{if(getMarketAsset(requestedSymbol))selectSymbol(requestedSymbol)},[requestedSymbol,selectSymbol]);
+  useEffect(()=>{
+    dataExplanationRequest.current?.abort();
+    dataExplanationRequest.current=null;
+    setDataExplanation(null);
+    setDataExplanationError('');
+    setExplainingDataType(null);
+    return()=>dataExplanationRequest.current?.abort();
+  },[selectedAsset.id,timeframe]);
   useEffect(()=>{
     const socket:Socket = io({path:'/socket.io',transports:['websocket'],autoConnect:true,reconnection:true,reconnectionDelay:700});
     const onConnect=()=>setStreamStatus('connected');
@@ -157,6 +172,34 @@ function LiveMarketDashboardContent(){
       setMarketAnalysisError(exception instanceof Error?exception.message:'Market analysis is unavailable.');
     }finally{
       setMarketAnalysisBusy(false);
+    }
+  }
+
+  async function explainDataAvailability(dataType:'quote'|'history'){
+    dataExplanationRequest.current?.abort();
+    const controller=new AbortController();
+    dataExplanationRequest.current=controller;
+    setExplainingDataType(dataType);
+    setDataExplanation(null);
+    setDataExplanationError('');
+    try{
+      const response=await fetch('/api/market/data-explanation',{
+        method:'POST',
+        headers:{'content-type':'application/json'},
+        body:JSON.stringify({symbol:selectedAsset.id,dataType,...(dataType==='history'?{timeframe}:{})}),
+        signal:controller.signal,
+      });
+      const result=await response.json();
+      if(!response.ok)throw new Error(result.error||'Market data availability explanation is unavailable.');
+      if(controller.signal.aborted)return;
+      setDataExplanation(result as MarketDataExplanation);
+    }catch(exception){
+      if(!controller.signal.aborted)setDataExplanationError(exception instanceof Error?exception.message:'Market data availability explanation is unavailable.');
+    }finally{
+      if(dataExplanationRequest.current===controller){
+        dataExplanationRequest.current=null;
+        setExplainingDataType(null);
+      }
     }
   }
 
@@ -254,6 +297,31 @@ function LiveMarketDashboardContent(){
           </div>
           <div className="live-chart-metadata"><span>{activeQuote?.isStale?'Last quote · STALE': 'Last quote'} {activeQuote?formatTime(activeQuote.updatedAt):'—'}</span><span>Quote source <b>{activeQuote?.source||'Unavailable'}</b></span><span>Chart source <b>{historyQuery.data?.source||'Loading'}</b></span><button type="button" className="live-refresh-button" aria-label="Refresh quotes" onClick={()=>{void selectedQuery.refetch();void batchQuery.refetch();void historyQuery.refetch()}}><RefreshCw size={13} className={selectedQuery.isFetching?'is-spinning':''}/> Refresh</button></div>
           {session?.user?.id&&<section className="live-market-ai" aria-label="AI market context">
+            {(quoteNeedsExplanation||historyNeedsExplanation)&&<div className="live-data-status-ai">
+              <p>AI can explain the verified source status; it cannot supply or estimate missing market data.</p>
+              <div>
+                {quoteNeedsExplanation&&<button type="button" className="btn bg-white/5" onClick={()=>void explainDataAvailability('quote')} disabled={explainingDataType!==null}>
+                  {explainingDataType==='quote'?<RefreshCw size={14} className="is-spinning"/>:<Sparkles size={14}/>}
+                  {explainingDataType==='quote'?'Checking quote status…':'Explain quote availability'}
+                </button>}
+                {historyNeedsExplanation&&<button type="button" className="btn bg-white/5" onClick={()=>void explainDataAvailability('history')} disabled={explainingDataType!==null}>
+                  {explainingDataType==='history'?<RefreshCw size={14} className="is-spinning"/>:<Sparkles size={14}/>}
+                  {explainingDataType==='history'?'Checking history status…':'Explain chart history'}
+                </button>}
+              </div>
+              {dataExplanationError&&<p className="live-data-alert" role="alert">{dataExplanationError}</p>}
+              {dataExplanation&&<div className="live-data-alert" aria-live="polite">
+                <strong>{dataExplanation.symbol} {dataExplanation.dataType==='quote'?'quote':'chart history'} · {dataExplanation.status.replaceAll('_',' ')}</strong>
+                <p>{dataExplanation.explanation.explanation}</p>
+                <p>{dataExplanation.explanation.caveat}</p>
+                <small>Suggested next step: {({
+                  refresh:'Refresh the market data.',
+                  configure_market_provider:'Ask an administrator to configure a supported market-data provider.',
+                  try_later:'Try again later.',
+                  contact_support:'Contact Aurevia support.',
+                })[dataExplanation.explanation.recommendedAction]}</small>
+              </div>}
+            </div>}
             <button type="button" className="btn bg-white/5" onClick={()=>void analyzeMarket()} disabled={marketAnalysisBusy}>
               {marketAnalysisBusy?<RefreshCw size={14} className="is-spinning"/>:<Sparkles size={14}/>}
               {marketAnalysisBusy?'Analyzing provider quotes…':'Explain provider quotes'}
