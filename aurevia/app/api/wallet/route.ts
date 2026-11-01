@@ -20,7 +20,7 @@ const schema=z.object({
 	type:z.nativeEnum(FundingType),
 	paymentMethodId:z.string().min(1).optional(),
 	amount:z.number().positive().max(100000000),
-	currency:z.literal('USD'),
+	currency:z.string().trim().max(8).optional(),
 	transactionReference:z.string().trim().max(180).optional(),
 	referenceInfo:z.string().trim().max(500).optional(),
 	senderInfo:z.string().trim().max(300).optional(),
@@ -109,6 +109,7 @@ export async function POST(req:Request){
 			body=await req.json();
 		}
 		const parsed=schema.parse(body);
+		if(parsed.currency!=='USD')return NextResponse.json({error:'Deposits and withdrawals must be denominated in USD.'},{status:400});
 		const hasBitcoinFields=Boolean(parsed.network||parsed.senderEmail||parsed.senderWalletName||parsed.senderWalletAddress||parsed.transactionDateTime||(parsed.type===FundingType.WITHDRAWAL&&parsed.transactionReference));
 		if(parsed.type!==FundingType.WITHDRAWAL&&hasBitcoinFields)throw new Error('BITCOIN_DETAILS_NOT_ALLOWED');
 		if(parsed.type===FundingType.WITHDRAWAL&&(!parsed.withdrawalDestinationId||parsed.destinationConfirmed!==true))return NextResponse.json({error:'Select a saved destination and confirm its details.'},{status:400});

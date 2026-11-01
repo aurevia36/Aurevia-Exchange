@@ -8,12 +8,14 @@ import {MARKET_UI_REFRESH_INTERVAL_MS} from '@/lib/live-market';
 type MarketItem={id:string;symbol:string;name:string;price:number;change?:number};
 
 type LiveQuotePayload={asset:{id:string;name:string;currency:string};price:number;changePercent:number;updatedAt:string;source:string;isStale?:boolean};
+type MarketDataStatus='LIVE'|'PARTIAL'|'INTERNAL'|'UNAVAILABLE';
 
 export default function HomeMarketPreview(){
   const {translate}=useLocale();
   const [markets,setMarkets]=useState<MarketItem[]>([]);
   const [selected,setSelected]=useState('');
   const [status,setStatus]=useState<'loading'|'ready'|'error'>('loading');
+  const [marketDataStatus,setMarketDataStatus]=useState<MarketDataStatus>('UNAVAILABLE');
   const [flash,setFlash]=useState<'up'|'down'|''>('');
   const [updatedAt,setUpdatedAt]=useState<number|null>(null);
   const [now,setNow]=useState(0);
@@ -38,6 +40,7 @@ export default function HomeMarketPreview(){
         }));
         setMarkets(normalized);
         setSelected(current=>current||normalized.find(item=>item.symbol==='BTC')?.id||normalized[0]?.id||'');
+        setMarketDataStatus(payload.marketDataStatus==='LIVE'||payload.marketDataStatus==='PARTIAL'||payload.marketDataStatus==='INTERNAL'?payload.marketDataStatus:'UNAVAILABLE');
         setStatus('ready');
         setUpdatedAt(Date.now());
       }catch{if(active)setStatus(current=>current==='ready'?current:'error')}
@@ -72,11 +75,12 @@ export default function HomeMarketPreview(){
   const changePct=current?.change;
   const changeClass=changePct===undefined?'':changePct>=0?'is-up':'is-down';
   const ageLabel=updatedAt!==null?`${Math.max(0,Math.round((now-updatedAt)/1000))}s`:'—';
+  const sourceStatus=marketDataStatus==='LIVE'?'LIVE':marketDataStatus==='PARTIAL'?'PARTIAL':marketDataStatus==='INTERNAL'?'REFERENCE':'UNAVAILABLE';
 
   return <div className="market-stage is-live" aria-label={translate('marketView')}>
     <div className="market-stage-top">
       <div className="market-source"><span className="source-dot is-live"/>{translate('demoEnvironment')} <span>{translate('marketView')}</span></div>
-      <span className="market-time"><span className="live-pill">LIVE</span> {translate('marketView')} · {ageLabel}</span>
+      <span className="market-time"><span className={`live-pill ${marketDataStatus==='LIVE'?'is-live':'is-reference'}`}>{sourceStatus}</span> {translate('marketView')} · {ageLabel}</span>
     </div>
     <div className="market-stage-instrument">
       <div>
@@ -108,7 +112,7 @@ export default function HomeMarketPreview(){
         })}
         {!visibleMarkets.length&&<span className="muted">{'No instruments available'}</span>}
       </div>
-      <span className="market-feed-status"><span className="source-dot is-live"/>{status==='ready'?'Live feed':translate('feedStatus',{status:status.toUpperCase()})}</span>
+      <span className="market-feed-status"><span className={`source-dot ${marketDataStatus==='LIVE'?'is-live':''}`}/>{status==='ready'?marketDataStatus==='LIVE'?'Provider feed':marketDataStatus==='PARTIAL'?'Mixed or stale feed':'Internal reference feed':translate('feedStatus',{status:status.toUpperCase()})}</span>
     </div>
   </div>;
 }

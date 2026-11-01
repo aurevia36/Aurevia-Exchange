@@ -11,6 +11,7 @@
 .live-ticker,.live-source-status{background:rgba(13,28,19,.9)}
 .live-source-status.is-live .live-status-dot,.live-provider-dot{background:#80b78b;box-shadow:0 0 12px rgba(128,183,139,.42)}
 .live-source-status:not(.is-live):not(.is-stale) .live-status-dot{background:#9d8770;box-shadow:none}
+.live-provider-dot.is-internal{background:#c5a45f;box-shadow:none}
 .live-ticker-item:hover,.live-ticker-item.is-active,.live-watch-row.is-selected{background:rgba(197,164,95,.1)}
 .live-watch-row.is-selected{border-color:rgba(207,179,111,.35)}
 .live-icon-button,.live-watchlist-controls select,.live-mobile-list-button{background:#102118}

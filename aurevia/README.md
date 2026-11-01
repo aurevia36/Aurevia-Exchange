@@ -188,7 +188,7 @@ Private file workflows require server-only `SUPABASE_URL` and `SUPABASE_SERVICE_
 | Capability | Provider/configuration | Current behavior without provider |
 | --- | --- | --- |
 | Database | Supabase Postgres; `DATABASE_URL`, `DIRECT_URL` | Server operations fail explicitly; no in-memory financial fallback |
-| Market information | Finnhub when configured and responsive; Aurevia Internal paper-market data otherwise | The market screen shows `Market data: Live` only for current Finnhub quotes and `Market data: Internal` for fallback prices and reference history |
+| Market information | Finnhub or Alpaca when configured and responsive; Aurevia Internal simulated reference data otherwise | The market screen shows `Market data: Live` only for current provider quotes and `Market data: Internal reference` for fallback prices and reference history |
 | Display currency | Finnhub exchange quotes when available; last known database rate, then an internal reference-rate table | Approximate display conversion only; source and stale/internal status are disclosed; ledger values are never converted |
 | Broker/execution | Aurevia internal simulated execution for each mode, with ledger and position isolation | Customer orders do not reach an external broker; live execution disabled |
 | Deposits and withdrawals | Funding-provider contract only; no bank, card, blockchain, or custody adapter | REAL BTC credits require separate manual verification and approval; withdrawals are capped to verified BTC-funded balance and remain incomplete without a payout provider |

@@ -2147,6 +2147,11 @@ section.floating-support-panel{
   background:linear-gradient(165deg,#4ade80,#31c48d);
   box-shadow:0 0 12px rgba(49,196,141,.35);
 }
+.live-pill.is-reference{
+  color:#182116;
+  background:linear-gradient(165deg,#e2c883,#c5a45f);
+  box-shadow:none;
+}
 
 /* Market stage — professional terminal */
 .market-stage.is-live{

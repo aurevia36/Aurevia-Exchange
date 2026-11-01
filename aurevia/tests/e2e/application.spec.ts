@@ -214,21 +214,22 @@ test('DEMO accounts can view and complete profile-based tier progression while K
 	await expect(page.getByRole('progressbar',{name:'Account tier progression'})).toBeVisible();
 });
 
-test('market view does not present generated reference prices as live data without a provider',async({page})=>{
+test('market view labels internal reference prices when no live provider is configured',async({page})=>{
 	const quotes=await page.request.get('/api/live-markets?symbols=AAPL,BTC');
 	expect(quotes.ok()).toBe(true);
 	const quoteData=await quotes.json();
-	expect(quoteData.marketDataStatus).toBe('UNAVAILABLE');
+	expect(quoteData.marketDataStatus).toBe('INTERNAL');
 	expect(quoteData.quotes).toHaveLength(2);
 	for(const quote of quoteData.quotes){
-		expect(quote).toHaveProperty('error');
-		expect(quote).not.toHaveProperty('price');
+		expect(quote.source).toBe('Aurevia Internal');
+		expect(quote.price).toBeGreaterThan(0);
 	}
 	const historyResponse=await page.request.get('/api/live-markets/AAPL?timeframe=1d');
-	expect(historyResponse.status()).toBe(503);
+	expect(historyResponse.ok()).toBe(true);
+	expect((await historyResponse.json()).source).toBe('Aurevia Internal');
 	await page.goto('/markets');
-	await expect(page.getByText('Market data: Unavailable').first()).toBeVisible();
-	await expect(page.getByText(/synthetic demo prices are not presented as live market data/i)).toBeVisible();
+	await expect(page.getByText('Market data: Internal reference').first()).toBeVisible();
+	await expect(page.getByText('AUREVIA INTERNAL REFERENCE DATA')).toBeVisible();
 });
 
 test('portfolio timeframe controls filter authenticated snapshot history accessibly on mobile',async({page})=>{
@@ -245,7 +246,7 @@ test('portfolio timeframe controls filter authenticated snapshot history accessi
 	expect(portfolio.allocations.reduce((sum:number,item:{percentage:string})=>sum+Number(item.percentage),0)).toBeCloseTo(100,2);
 	await page.goto('/portfolio');
 	await expect(page.getByRole('heading',{name:'My Portfolio'})).toBeVisible();
-	await expect(page.getByRole('status',{name:'Market data source: in-app prices'})).toBeVisible();
+	await expect(page.getByRole('status',{name:'Market data source: DEMO prices'})).toBeVisible();
 	const controls=page.getByRole('group',{name:'Performance timeframe'});
 	await controls.getByRole('button',{name:'1W'}).click();
 	await expect(controls.getByRole('button',{name:'1W'})).toHaveAttribute('aria-pressed','true');
@@ -1595,11 +1596,11 @@ test('profile completion and administrator identity review progress the account 
 	expect(forgedTier.ok()).toBe(true);
 	expect((await forgedTier.json()).label).toBe('TIER 2');
 	await page.goto('/dashboard');
-	await expect(page.getByRole('region',{name:'Account tier progress'})).toContainText('TIER 2');
-	await expect(page.getByRole('link',{name:'View requirements'})).toHaveAttribute('href','/tier');
+	await expect(page.locator('.user-dashboard-profile-line').getByLabel('Current account tier: TIER 2')).toBeVisible();
 	await page.setViewportSize({width:320,height:800});
 	await page.goto('/tier');
 	await expect(page.getByRole('heading',{name:'Account tiers'})).toBeVisible();
+	await expect(page.getByRole('region',{name:'Current tier progress'})).toContainText('TIER 2');
 	await expect(page.locator('.tier-step.is-current')).toContainText('Current');
 	await expectNoHorizontalOverflow(page);
 	const state=await page.request.get('/api/tier-requests').then(response=>response.json());

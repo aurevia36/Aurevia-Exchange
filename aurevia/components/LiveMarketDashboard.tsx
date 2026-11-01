@@ -8,7 +8,7 @@ import {io,type Socket} from 'socket.io-client';
 import {Activity,ArrowLeftRight,Check,ChevronDown,GripVertical,ListPlus,Plus,RefreshCw,Search,Sparkles,Star,Trash2,X} from 'lucide-react';
 import Nav from '@/components/Nav';
 import LivePriceChart from '@/components/LivePriceChart';
-import {COMPARISON_SYMBOLS,DEFAULT_WATCHLIST,MARKET_ASSETS,TIMEFRAMES,getMarketAsset,type MarketCandle,type MarketQuote,type TimeframeId} from '@/lib/live-market';
+import {COMPARISON_SYMBOLS,DEFAULT_WATCHLIST,MARKET_ASSETS,TIMEFRAMES,getMarketAsset,isExternalMarketDataSource,type MarketCandle,type MarketQuote,type TimeframeId} from '@/lib/live-market';
 import {setMarketWatchlistUserScope,useMarketWatchlists} from '@/lib/market-watchlists';
 
 type QuoteError={asset:NonNullable<ReturnType<typeof getMarketAsset>>;error:string};
@@ -83,6 +83,9 @@ function LiveMarketDashboardContent(){
   const activeQuote=(batchQuotes.get(selectedAsset.id) && isQuote(batchQuotes.get(selectedAsset.id)) ? batchQuotes.get(selectedAsset.id) as MarketQuote : getQuote(selectedQuery.data,selectedAsset.id)) || historyQuery.data?.quote;
   const error=historyQuery.error instanceof Error?historyQuery.error.message:selectedQuery.error instanceof Error?selectedQuery.error.message:'';
   const activeProvider=activeQuote?.source;
+  const activeQuoteIsExternal=!!activeQuote&&isExternalMarketDataSource(activeQuote.source);
+  const activeQuoteStatus=!activeQuote?'Unavailable':activeQuote.isStale?'Stale':activeQuoteIsExternal?'Live':'Internal reference';
+  const activeQuoteSourceLabel=!activeQuote?'No provider quote':activeQuoteIsExternal?activeProvider||'External provider':'Aurevia Internal reference';
   const liveQuotes=[...batchQuotes.values()].filter((item):item is MarketQuote=>isQuote(item)&&!item.isStale);
   const gainers=[...liveQuotes].filter(item=>item.changePercent>0).sort((a,b)=>b.changePercent-a.changePercent).slice(0,3);
   const losers=[...liveQuotes].filter(item=>item.changePercent<0).sort((a,b)=>a.changePercent-b.changePercent).slice(0,3);
@@ -170,8 +173,8 @@ function LiveMarketDashboardContent(){
 
   return <><Nav/><main className="live-market-page">
     <div className="live-market-topline">
-      <div className="live-market-heading"><span>GLOBAL MARKETS <i/> {activeProvider?`${activeProvider.toUpperCase()} PROVIDER DATA`:'LIVE PROVIDER DATA UNAVAILABLE'}</span><h1>Markets</h1><p>Only quotes and candles returned by connected market-data providers are shown. Synthetic demo prices are not presented as live market data.</p></div>
-      <div className={`live-source-status ${activeQuote?.isStale?'is-stale':''} ${activeQuote&&!activeQuote.isStale?'is-live':''}`}><span className="live-status-dot"/>{`Market data: ${activeQuote?activeQuote.isStale?'Stale':'Live':'Unavailable'}`} <small>{activeQuote?`${activeProvider} quote · ${formatTime(activeQuote.updatedAt)}${activeQuote.isStale?' · last provider quote':''}`:'Configure Finnhub or Alpaca market data to view provider quotes'} · {streamStatus==='connected'?'WebSocket connected':'WebSocket reconnecting'}</small></div>
+      <div className="live-market-heading"><span>GLOBAL MARKETS <i/> {activeQuoteIsExternal?`${activeProvider?.toUpperCase()} PROVIDER DATA`:activeQuote?'AUREVIA INTERNAL REFERENCE DATA':'LIVE PROVIDER DATA UNAVAILABLE'}</span><h1>Markets</h1><p>Connected provider quotes are labeled as live. Internal reference values are simulated and are not live market data.</p></div>
+      <div className={`live-source-status ${activeQuote?.isStale?'is-stale':''} ${activeQuoteIsExternal&&!activeQuote?.isStale?'is-live':''} ${activeQuote&&!activeQuoteIsExternal?'is-internal':''}`}><span className="live-status-dot"/>{`Market data: ${activeQuoteStatus}`} <small>{activeQuote?`${activeQuoteSourceLabel} quote · ${formatTime(activeQuote.updatedAt)}${activeQuote.isStale&&activeQuoteIsExternal?' · last provider quote':''}`:'Configure Finnhub or Alpaca market data to view provider quotes'} · {streamStatus==='connected'?'WebSocket connected':'WebSocket reconnecting'}</small></div>
     </div>
 
     <section className="live-ticker" aria-label="Market ticker">
@@ -291,8 +294,8 @@ function LiveMarketDashboardContent(){
           <div className="live-key-row"><span>Type</span><b>{marketTypeLabel(selectedAsset.type)}</b></div>
           <div className="live-key-row"><span>Day range</span><b>{activeQuote?.dayLow!==null&&activeQuote?.dayLow!==undefined&&activeQuote.dayHigh!==null?`${formatPrice(activeQuote.dayLow,selectedAsset.currency)} – ${formatPrice(activeQuote.dayHigh,selectedAsset.currency)}`:'—'}</b></div>
         </section>
-        <section className="live-right-card live-provider-card"><span className="live-provider-mark">{activeProvider==='Finnhub'?'F':activeProvider==='Alpaca'?'A':'—'}</span><div><b>{`Market data: ${activeQuote?activeQuote.isStale?'Stale':'Live':'Unavailable'}`}</b><small>{activeProvider||'No provider quote'}</small></div><span className="live-provider-dot" title={activeQuote?`${activeProvider} provider quote`:'No live market-data provider response'}/></section>
-        <p className="live-disclaimer">{activeQuote?`The current quote is from ${activeProvider} and may be delayed.`:'Aurevia internal market data is active while external providers are disabled or unavailable.'} {historyQuery.data?.source?`Chart history is from ${historyQuery.data.source}.`:'Chart history is using the internal reference feed.'} This view is informational; eligible REAL-mode orders, when enabled, are submitted separately through Trade to Alpaca Paper Trading only.</p>
+        <section className="live-right-card live-provider-card"><span className="live-provider-mark">{activeQuoteIsExternal?activeProvider==='Finnhub'?'F':'A':activeQuote?'R':'—'}</span><div><b>{`Market data: ${activeQuoteStatus}`}</b><small>{activeQuoteSourceLabel}</small></div><span className={`live-provider-dot ${activeQuoteIsExternal?'is-external':'is-internal'}`} title={activeQuoteIsExternal?`${activeProvider} provider quote`:activeQuote?'Simulated internal reference data':'No live market-data provider response'}/></section>
+        <p className="live-disclaimer">{activeQuoteIsExternal?`The current quote is from ${activeProvider} and may be delayed.`:activeQuote?'The current price is an internal simulated reference and is not live market data.':'Aurevia internal reference data is shown only when external providers are unavailable.'} {historyQuery.data?.source?historyQuery.data.source==='Aurevia Internal'?'Chart history uses simulated internal reference data.':`Chart history is from ${historyQuery.data.source}.`:'Chart history is using the internal reference feed.'} This view is informational; eligible REAL-mode orders, when enabled, are submitted separately through Trade to Alpaca Paper Trading only.</p>
       </aside>
     </div>
   </main></>;

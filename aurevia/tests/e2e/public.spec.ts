@@ -69,6 +69,12 @@ test('homepage hero actions remain usable with reduced motion',async({browser,pa
 	}finally{await nextSession.close();}
 });
 
+test('homepage labels internal reference prices as non-live market data',async({page})=>{
+	await page.goto('/');
+	await expect(page.locator('.market-time .live-pill')).toHaveText('REFERENCE');
+	await expect(page.locator('.market-feed-status')).toContainText('Internal reference feed');
+});
+
 test('site theme preference switches globally and persists across navigation',async({page})=>{
 	await page.goto('/');
 	const themeToggle=page.getByRole('button',{name:'Switch to light mode'});
