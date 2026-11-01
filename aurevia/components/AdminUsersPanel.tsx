@@ -1,13 +1,57 @@
 'use client';
 
+import Image from 'next/image';
 import {FormEvent,useCallback,useEffect,useState} from 'react';
-import {RefreshCw,Search,Trash2} from 'lucide-react';
+import {RefreshCw,Search,Trash2,UserRound} from 'lucide-react';
 import {SUPPORTED_CURRENCIES} from '@/lib/config/simulation';
 import ReceiptGenerator,{type ReceiptData} from '@/components/ReceiptGenerator';
 
 type AdminUser={id:string;email:string;name:string|null;phone:string|null;country:string|null;role:'USER'|'ADMIN';status:string;accountMode:'DEMO'|'REAL';kycStatus:string;createdAt:string;depositEnabled:boolean;withdrawalEnabled:boolean;accountRestricted:boolean;restrictionReason:string|null};
+type AdminLoginEvent={id:string;action:string;createdAt:string;metadata:{clientIp?:string|null;userAgent?:string|null;reason?:string|null}|null};
+function AdminUserPhoto({userId,name}:{userId:string;name:string|null}){
+	const [url,setUrl]=useState('');
+	const [loaded,setLoaded]=useState(false);
+	useEffect(()=>{
+		let active=true;
+		void fetch(`/api/profile/avatar?userId=${encodeURIComponent(userId)}`,{cache:'no-store'}).then(async response=>{
+			const result=await response.json();
+			if(!response.ok)throw new Error(result.error||'Unable to load profile photo.');
+			if(active)setUrl(typeof result.url==='string'?result.url:'');
+		}).catch(()=>{if(active)setUrl('')}).finally(()=>{if(active)setLoaded(true)});
+		return()=>{active=false};
+	},[userId]);
+	return <div className="mb-3 flex items-center gap-3" aria-label={`${name||'User'} profile photo`}>
+		<span className="grid size-14 shrink-0 place-items-center overflow-hidden rounded-full border border-white/10 bg-white/5">{url?<Image src={url} alt="" width={56} height={56} unoptimized className="size-14 object-cover"/>:<UserRound size={23} className="muted" aria-hidden="true"/>}</span>
+		<span className="text-xs muted">{loaded?(url?'Profile photo':'No profile photo available'):'Loading profile photo…'}</span>
+	</div>;
+}
+
 type Adjustment={accountMode:'DEMO'|'REAL';currency:(typeof SUPPORTED_CURRENCIES)[number];amount:string;direction:'CREDIT'|'DEBIT';category:'ADMIN_ALLOCATION'|'CORRECTION'|'PROMOTIONAL'|'REVERSAL';reason:string;idempotencyKey:string};
 const emptyAdjustment=(accountMode:'DEMO'|'REAL'):Adjustment=>({accountMode,currency:'USD',amount:'',direction:'CREDIT',category:'ADMIN_ALLOCATION',reason:'',idempotencyKey:''});
+function AdminLoginHistory({userId}:{userId:string}){
+	const [events,setEvents]=useState<AdminLoginEvent[]|null>(null);
+	const [loading,setLoading]=useState(false);
+	const [error,setError]=useState('');
+	async function load(){
+		setLoading(true);setError('');
+		try{
+			const response=await fetch(`/api/admin/audit?loginUserId=${encodeURIComponent(userId)}`,{cache:'no-store'});
+			const result=await response.json();
+			if(!response.ok)throw new Error(result.error||'Unable to load login history.');
+			setEvents(result as AdminLoginEvent[]);
+		}catch(exception){setError(exception instanceof Error?exception.message:'Unable to load login history.')}
+		finally{setLoading(false)}
+	}
+	return <section className="mt-4 border-t border-white/10 pt-4">
+		<div className="account-panel-title"><div><h3>Login history</h3><p className="account-panel-subtitle">Login and logout records with device and network details.</p></div><button className="btn min-h-10 bg-white/5" type="button" onClick={()=>void load()} disabled={loading}>{loading?'Loading…':events?'Refresh history':'View history'}</button></div>
+		<p className="mt-2 text-xs muted">IP addresses are approximate network data. No verified physical-location provider is configured; an IP does not establish a person’s location.</p>
+		{error&&<p className="mt-2 text-sm text-loss" role="alert">{error}</p>}
+		{events&&<div className="mt-3 grid gap-2">{events.length?events.map(event=><article className="rounded border border-white/10 p-3" key={event.id}>
+			<div className="flex flex-wrap items-center justify-between gap-2"><b>{event.action==='LOGIN_SUCCESS'?'Successful sign-in':event.action==='LOGIN_FAILED'?'Failed sign-in':event.action==='LOGOUT_SUCCESS'?'Signed out':event.action}</b><time className="text-xs muted" dateTime={event.createdAt}>{new Date(event.createdAt).toLocaleString()}</time></div>
+			<dl className="mt-2 grid gap-2 text-xs sm:grid-cols-2"><div><dt className="muted">IP address</dt><dd className="break-all">{event.metadata?.clientIp||'Unavailable'}</dd></div><div><dt className="muted">Approximate location</dt><dd>Unavailable</dd></div><div className="sm:col-span-2"><dt className="muted">Device / browser</dt><dd className="break-words">{event.metadata?.userAgent||'Unavailable'}</dd></div>{event.metadata?.reason&&<div><dt className="muted">Result detail</dt><dd>{event.metadata.reason}</dd></div>}</dl>
+		</article>):<p className="text-sm muted">No login records are available for this account.</p>}</div>}
+	</section>;
+}
 
 export default function AdminUsersPanel(){
 	const [users,setUsers]=useState<AdminUser[]>([]);
@@ -169,6 +213,8 @@ export default function AdminUsersPanel(){
 				</div></div>
 				{user.status==='DELETED'?<p className="mt-3 text-sm muted">This account cannot sign in. Restore it to re-enable account access.</p>:<details className="mt-2" open={expandedUserId===user.id} onToggle={event=>{if(event.currentTarget.open)setExpandedUserId(user.id);else if(expandedUserId===user.id)setExpandedUserId('')}}><summary className="min-h-11 cursor-pointer py-2 text-sm gold">Account controls, verification, and ledger</summary>{expandedUserId===user.id&&<div>
 					<dl className="mt-2 grid gap-2 text-xs sm:grid-cols-2"><div><dt className="muted">Country</dt><dd>{user.country||'Not set'}</dd></div><div><dt className="muted">Phone</dt><dd>{user.phone||'Not set'}</dd></div><div><dt className="muted">Created</dt><dd>{new Date(user.createdAt).toLocaleString()}</dd></div><div><dt className="muted">Deposit / withdrawal</dt><dd>{user.depositEnabled?'Enabled':'Disabled'} / {user.withdrawalEnabled?'Enabled':'Disabled'}</dd></div><div><dt className="muted">Account restriction</dt><dd>{user.accountRestricted?user.restrictionReason||'Restricted':'None'}</dd></div></dl>
+					<AdminUserPhoto userId={user.id} name={user.name}/>
+					<AdminLoginHistory userId={user.id}/>
 					<div className="mt-4 flex flex-wrap gap-2">
 						<button className="btn min-h-10 bg-white/5" type="button" disabled={busy||user.status==='CLOSED'} onClick={()=>void updateAccountControl(user,'depositEnabled',!user.depositEnabled)}>{user.depositEnabled?'Disable deposits':'Enable deposits'}</button>
 						<button className="btn min-h-10 bg-white/5" type="button" disabled={busy||user.status==='CLOSED'} onClick={()=>void updateAccountControl(user,'withdrawalEnabled',!user.withdrawalEnabled)}>{user.withdrawalEnabled?'Disable withdrawals':'Enable withdrawals'}</button>

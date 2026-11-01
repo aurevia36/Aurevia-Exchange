@@ -92,7 +92,16 @@ describe('DEMO activity separation',()=>{
 			isRead:true,archivedAt:null,createdAt:new Date('2026-01-05T00:00:00Z'),accountMode:null,
 			relatedEntity:null,relatedId:null,actionUrl:'/settings',pushOutbox:null,
 		}]);
-		const result=await getUserActivity('user-1',AccountMode.DEMO,'all');
-		expect(result.items[0]).toMatchObject({source:'notification',permanentDeletionAllowed:false,protectionReason:'Security and verification notifications must be retained.'});
+		mocks.audits.mockResolvedValue([{
+			id:'login-event',actorId:'user-1',action:'LOGIN_FAILED',entity:'LOGIN',entityId:'user-1',
+			metadata:{clientIp:'203.0.113.10',userAgent:'private browser details'},createdAt:new Date('2026-01-06T00:00:00Z'),
+		}]);
+		const result=await getUserActivity('user-1',AccountMode.DEMO,'security');
+		expect(result.items).toMatchObject([
+			{id:'login-event',category:'security',action:'Failed sign-in',status:'FAILED',source:'audit',details:{eventType:'LOGIN_FAILED'},permanentDeletionAllowed:false},
+			{id:'security-notice',source:'notification',permanentDeletionAllowed:false,protectionReason:'Security and verification notifications must be retained.'},
+		]);
+		expect(JSON.stringify(result.items)).not.toContain('203.0.113.10');
+		expect(JSON.stringify(result.items)).not.toContain('private browser details');
 	});
 });

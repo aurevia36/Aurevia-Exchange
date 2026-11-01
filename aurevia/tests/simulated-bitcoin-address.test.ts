@@ -10,6 +10,7 @@ describe('simulated Bitcoin address display validation',()=>{
 	it('rejects whitespace, malformed, testnet, and mixed-case Bech32 input',()=>{
 		expect(isBitcoinMainnetAddress(' bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh')).toBe(false);
 		expect(isBitcoinMainnetAddress('not-an-address')).toBe(false);
+					expect(isBitcoinMainnetAddress('1BoatSLRHtKNngkdXxxxxxxxxxxyJt')).toBe(false);
 		expect(isBitcoinMainnetAddress('tb1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh')).toBe(false);
 		expect(isBitcoinMainnetAddress('bc1Qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh')).toBe(false);
 	});

@@ -1,8 +1,28 @@
 import {Prisma} from '@prisma/client';
 import {describe,expect,it} from 'vitest';
 import {assertPaperBuyCollateral,normalizeBitcoinTransactionId,paperOrderCollateral,validateBitcoinDepositAmount} from '@/lib/bitcoin-funding';
+import {BITCOIN_MAINNET_NETWORK,normalizeBitcoinDepositSubmission} from '@/lib/bitcoin-deposit-submission';
 
 describe('REAL BTC deposit validation',()=>{
+	it('stores BTC submission details against the configured mainnet destination',()=>{
+		const result=normalizeBitcoinDepositSubmission({network:BITCOIN_MAINNET_NETWORK,transactionReference:'A'.repeat(64),senderEmail:'sender@example.com',senderWalletName:'Example Wallet',senderWalletAddress:'1BoatSLRHtKNngkdXEeobR76b53LETtpyT',depositDateTime:'2026-03-08T08:30:00.000Z'},'1BoatSLRHtKNngkdXEeobR76b53LETtpyT');
+
+		expect(result).toEqual({
+			network:BITCOIN_MAINNET_NETWORK,
+			transactionReference:'a'.repeat(64),
+			referenceInfo:'2026-03-08T08:30:00.000Z',
+			senderInfo:'Sender email: sender@example.com\nSender wallet/provider: Example Wallet\nSender wallet address: 1BoatSLRHtKNngkdXEeobR76b53LETtpyT',
+			destinationInfo:'1BoatSLRHtKNngkdXEeobR76b53LETtpyT',
+		});
+	});
+
+	it('rejects missing network or configured address and invalid Bitcoin references',()=>{
+		expect(()=>normalizeBitcoinDepositSubmission({senderEmail:'sender@example.com'},'1BoatSLRHtKNngkdXEeobR76b53LETtpyT')).toThrow('BITCOIN_NETWORK_REQUIRED');
+		expect(()=>normalizeBitcoinDepositSubmission({network:BITCOIN_MAINNET_NETWORK},null)).toThrow('BTC_DESTINATION_NOT_CONFIGURED');
+		expect(()=>normalizeBitcoinDepositSubmission({network:BITCOIN_MAINNET_NETWORK,transactionReference:'invalid'},'1BoatSLRHtKNngkdXEeobR76b53LETtpyT')).toThrow('INVALID_BTC_TXID');
+		expect(()=>normalizeBitcoinDepositSubmission({network:BITCOIN_MAINNET_NETWORK,senderWalletAddress:'not-an-address'},'1BoatSLRHtKNngkdXEeobR76b53LETtpyT')).toThrow('INVALID_BTC_SENDER_ADDRESS');
+	});
+
 	it('normalizes only 64-character hexadecimal transaction IDs',()=>{
 		expect(normalizeBitcoinTransactionId(`  ${'A'.repeat(64)} `)).toBe('a'.repeat(64));
 		expect(normalizeBitcoinTransactionId('a'.repeat(63))).toBeNull();

@@ -3,6 +3,7 @@
 import {useCallback,useEffect,useMemo,useState} from 'react';
 import {Archive,RefreshCw,Search,ShieldAlert,Trash2} from 'lucide-react';
 import type {ActivityCategory,ActivityRecord} from '@/lib/activity';
+import {groupByLocalDate,localDateBoundary} from '@/lib/local-date';
 
 type UserOption={id:string;name:string|null;email:string;accountMode:'DEMO'|'REAL';status:string};
 type StateFilter='active'|'archived'|'hidden'|'all';
@@ -45,8 +46,8 @@ export default function AdminActivityManagementPanel(){
 			const params=new URLSearchParams({userId:target.id,accountMode:mode,category,limit:'30',offset:String(offset),state});
 			if(activitySearch.trim())params.set('search',activitySearch.trim());
 			if(statusFilter)params.set('status',statusFilter);
-			if(dateFrom)params.set('dateFrom',dateFrom);
-			if(dateTo)params.set('dateTo',`${dateTo}T23:59:59.999`);
+			if(dateFrom){const boundary=localDateBoundary(dateFrom);if(boundary)params.set('dateFrom',boundary)}
+			if(dateTo){const boundary=localDateBoundary(dateTo,true);if(boundary)params.set('dateTo',boundary)}
 			const response=await fetch(`/api/admin/activity?${params.toString()}`,{cache:'no-store'});
 			const result=await response.json();
 			if(!response.ok)throw new Error(result.error||'Unable to load activity records.');
@@ -59,6 +60,7 @@ export default function AdminActivityManagementPanel(){
 	useEffect(()=>{setData(null);if(target)void load()},[load,target]);
 
 	const selectedItems=useMemo(()=>data?.items.filter(item=>selected.has(`${item.source}:${item.id}`))||[],[data,selected]);
+	const groupedActivity=groupByLocalDate(data?.items||[]);
 	function toggle(item:ActivityRecord){
 		const key=`${item.source}:${item.id}`;
 		setSelected(current=>{const next=new Set(current);if(next.has(key))next.delete(key);else next.add(key);return next});
@@ -122,11 +124,11 @@ export default function AdminActivityManagementPanel(){
 		{error&&<p className="account-callout mt-4" role="alert">{error}</p>}{notice&&<p className="mt-3 text-sm text-profit" role="status">{notice}</p>}
 		<section className="account-panel card mt-4 overflow-hidden">
 			<div className="account-panel-title px-4 pt-4"><div><h2>{target?`${mode} activity records`:'Select a user account'}</h2><p className="account-panel-subtitle">{data?`${data.items.length} records loaded · ${data.total} matches in current page window`:'Activity details are loaded only after an administrator selects an account.'}</p></div></div>
-			{loading?<div className="account-empty" role="status">Loading activity records…</div>:data?.items.length?<div className="activity-feed">{data.items.map(item=><article className="activity-feed-row activity-managed-row" key={`${item.source}:${item.id}`}>
-				<label><input type="checkbox" checked={selected.has(`${item.source}:${item.id}`)} onChange={()=>toggle(item)} aria-label={`Select ${item.action}`}/></label>
+			{loading?<div className="account-empty" role="status">Loading activity records…</div>:data?.items.length?<div className="activity-feed">{groupedActivity.map(group=><div key={group.key}><h3 className="px-4 py-2 text-xs font-semibold muted">{group.label}</h3>{group.items.map(item=><article className="activity-feed-row activity-managed-row" key={`${item.source}:${item.id}`}>
+				<label><input type="checkbox" checked={selected.has(`${item.source}:${item.id}`)} onChange={()=>toggle(item)} disabled={item.source==='audit'} aria-label={`Select ${item.action}`}/></label>
 				<div className="activity-feed-main"><div><b>{item.action}</b><span>{item.asset}</span>{item.archivedAt&&<small>ARCHIVED</small>}{item.hidden&&<small>REMOVED FROM FEED</small>}{item.permanentDeletionAllowed&&<small>ELIGIBLE FOR PERMANENT DELETION</small>}</div><p>{item.sourceLabel} · {item.status} · {new Date(item.timestamp).toLocaleString()}</p><details><summary>Record and retention details</summary><dl><div><dt>Source ID</dt><dd>{item.id}</dd></div><div><dt>Record type</dt><dd>{item.source}</dd></div><div><dt>Account mode</dt><dd>{mode}</dd></div><div><dt>Retention</dt><dd>{item.protectionReason||'Financial/business source record retained.'}</dd></div></dl></details></div>
 				<span className={`status-pill ${item.permanentDeletionAllowed?'':'mode-real'}`}>{item.permanentDeletionAllowed?'Eligible':'Protected'}</span>
-			</article>)}</div>:<div className="account-empty">{target?'No activity matches the selected filters.':'Search for and select a user to review activity.'}</div>}
+			</article>)}</div>)}</div>:<div className="account-empty">{target?'No activity matches the selected filters.':'Search for and select a user to review activity.'}</div>}
 			{data?.hasMore&&<div className="activity-pagination"><button type="button" className="button-secondary" onClick={()=>void load(data.items.length,true)} disabled={loading}>Load more</button></div>}
 		</section>
 	</div>;

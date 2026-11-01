@@ -2,7 +2,7 @@ import {AccountMode,FundingStatus,FundingType,Prisma} from '@prisma/client';
 import {beforeEach,describe,expect,it,vi} from 'vitest';
 
 const mocks=vi.hoisted(()=>({
-	requireUser:vi.fn(),userFindUnique:vi.fn(),destinationFindFirst:vi.fn(),transaction:vi.fn(),
+	requireUser:vi.fn(),userFindUnique:vi.fn(),destinationFindFirst:vi.fn(),btcSettingFindUnique:vi.fn(),transaction:vi.fn(),
 	ensureUserLedger:vi.fn(),balance:vi.fn(),roundUsdAmount:vi.fn(),getRealWithdrawableBalance:vi.fn(),
 	validateWithdrawal:vi.fn(),decryptWithdrawalDestination:vi.fn(),createNotification:vi.fn(),
 	notifyActiveAdmins:vi.fn(),sendSupportEmail:vi.fn(),rateLimit:vi.fn(),
@@ -12,6 +12,7 @@ vi.mock('@/lib/auth',()=>({requireUser:mocks.requireUser}));
 vi.mock('@/lib/db',()=>({db:{
 	user:{findUnique:mocks.userFindUnique},
 	withdrawalDestination:{findFirst:mocks.destinationFindFirst},
+	systemSetting:{findUnique:mocks.btcSettingFindUnique},
 	$transaction:mocks.transaction,
 }}));
 vi.mock('@/lib/ledger',()=>({balance:mocks.balance,ensureUserLedger:mocks.ensureUserLedger,roundUsdAmount:mocks.roundUsdAmount}));
@@ -44,12 +45,22 @@ function request(idempotencyKey=key){
 	});
 }
 
+function bitcoinDepositRequest(network='BITCOIN_MAINNET'){
+	return new Request('https://aurevia.test/api/wallet',{
+		method:'POST',
+		headers:{'content-type':'application/json','Idempotency-Key':'btc-deposit-request'},
+		body:JSON.stringify({type:FundingType.DEPOSIT,amount:20,currency:'USD',transactionReference:'A'.repeat(64),network,senderEmail:'sender@example.com',senderWalletName:'Example wallet',senderWalletAddress:'1BoatSLRHtKNngkdXEeobR76b53LETtpyT',depositDateTime:'2026-03-08T08:30:00.000Z'}),
+	});
+}
+
 beforeEach(()=>{
 	vi.clearAllMocks();
 	storedRequest=null;
 	mocks.requireUser.mockResolvedValue({id:'user-1'});
 	mocks.userFindUnique.mockResolvedValue({accountMode:AccountMode.REAL,status:'ACTIVE',depositEnabled:true,withdrawalEnabled:true,accountRestricted:false});
 	mocks.destinationFindFirst.mockResolvedValue(destination);
+	mocks.destinationFindFirst.mockResolvedValue(destination);
+	mocks.btcSettingFindUnique.mockResolvedValue({value:'1BoatSLRHtKNngkdXEeobR76b53LETtpyT'});
 	mocks.ensureUserLedger.mockResolvedValue({id:'user-ledger'});
 	mocks.balance.mockResolvedValue(new Prisma.Decimal('100'));
 	mocks.roundUsdAmount.mockImplementation((value:number|string)=>new Prisma.Decimal(value));
@@ -100,5 +111,29 @@ describe('wallet withdrawal destination snapshot',()=>{
 		expect((await response.json()).id).toBe(existing.id);
 		expect(tx.fundingRequest.create).not.toHaveBeenCalled();
 		expect(tx.withdrawalDestinationSnapshot.create).not.toHaveBeenCalled();
+	});
+
+	it('stores validated BTC deposit metadata as a pending request without ledger posting',async()=>{
+		const response=await POST(bitcoinDepositRequest());
+		const body=await response.json();
+
+		expect(response.status).toBe(201);
+		expect(body.status).toBe(FundingStatus.PENDING_REVIEW);
+		expect(storedRequest).toMatchObject({
+			transactionReference:'a'.repeat(64),
+			network:'BITCOIN_MAINNET',
+			referenceInfo:'2026-03-08T08:30:00.000Z',
+			senderInfo:'Sender email: sender@example.com\nSender wallet/provider: Example wallet\nSender wallet address: 1BoatSLRHtKNngkdXEeobR76b53LETtpyT',
+			destinationInfo:'1BoatSLRHtKNngkdXEeobR76b53LETtpyT',
+		});
+		expect(mocks.ensureUserLedger).not.toHaveBeenCalled();
+		expect(tx.fundingRequest.create).toHaveBeenCalledTimes(1);
+	});
+
+	it('rejects a BTC deposit on a network that is not configured',async()=>{
+		const response=await POST(bitcoinDepositRequest('BITCOIN_TESTNET'));
+
+		expect(response.status).toBe(400);
+		expect(tx.fundingRequest.create).not.toHaveBeenCalled();
 	});
 });

@@ -127,9 +127,14 @@ export const authOptions:NextAuthOptions={
       const token='token' in message?message.token:undefined;
       const userId=token?.id||token?.sub;
       const sessionId=typeof token?.sessionId==='string'?token.sessionId:null;
-      if(!userId||!sessionId)return;
-      try{await db.user.updateMany({where:{id:String(userId),activeSessionId:sessionId},data:{activeSessionId:null,activeSessionUpdatedAt:null}});}
-      catch{console.warn('Unable to clear the active account session.');}
+      if(!userId)return;
+      if(sessionId){
+        try{await db.user.updateMany({where:{id:String(userId),activeSessionId:sessionId},data:{activeSessionId:null,activeSessionUpdatedAt:null}});}
+        catch{console.warn('Unable to clear the active account session.');}
+      }
+      try{
+        await db.auditLog.create({data:{actorId:String(userId),action:'LOGOUT_SUCCESS',entity:'LOGIN',entityId:String(userId),metadata:{status:'SUCCESS',authMethod:'credentials',sessionRef:sessionId?createHash('sha256').update(sessionId).digest('hex').slice(0,24):null}}});
+      }catch{console.warn('Unable to persist logout audit.');}
     }
   },
 };

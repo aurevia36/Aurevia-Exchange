@@ -83,7 +83,7 @@ export async function getUserActivity(userId:string,accountMode:AccountMode,cate
     db.position.findMany({where:{userId,accountMode,...(sourceIdFilter('position')||{}),...(positionStatus?{status:positionStatus}:{}),...(query.dateFrom||query.dateTo?{openedAt:dateFilter}:{}),...(search?{OR:[{id:searchContains(search)},{instrument:{symbol:searchContains(search)}}]}:{})},include:{instrument:{select:{symbol:true}}},orderBy:{openedAt:'desc'},take}),
     db.investmentRequest.findMany({where:{userId,accountMode,...(sourceIdFilter('investment')||{}),...(investmentStatus?{status:investmentStatus}:{}),...(query.dateFrom||query.dateTo?{requestedAt:dateFilter}:{}),...(search?{OR:[{id:searchContains(search)},{opportunity:{OR:[{title:searchContains(search)},{assetSymbol:searchContains(search)},{category:searchContains(search)}]}}]}:{})},include:{opportunity:{select:{title:true,assetSymbol:true,category:true,targetReturnPercent:true,durationDays:true}}},orderBy:{requestedAt:'desc'},take}),
     db.fundingRequest.findMany({where:{userId,accountMode,...(sourceIdFilter('funding')||{}),...(fundingStatus?{status:fundingStatus}:{}),...(query.dateFrom||query.dateTo?{createdAt:dateFilter}:{}),...(search?{OR:[{id:searchContains(search)},{method:searchContains(search)},{transactionReference:searchContains(search)}]}:{})},orderBy:{createdAt:'desc'},take}),
-    db.auditLog.findMany({where:{actorId:userId,entity:{in:['ORDER','POSITION','INVESTMENT']}},select:{id:true,actorId:true,action:true,entity:true,entityId:true,metadata:true,createdAt:true},orderBy:{createdAt:'desc'},take}),
+    db.auditLog.findMany({where:{actorId:userId,entity:{in:['ORDER','POSITION','INVESTMENT','LOGIN']},...(query.dateFrom||query.dateTo?{createdAt:dateFilter}:{})},select:{id:true,actorId:true,action:true,entity:true,entityId:true,metadata:true,createdAt:true},orderBy:{createdAt:'desc'},take}),
     db.notification.findMany({where:notificationWhere,include:{pushOutbox:{select:{id:true}}},orderBy:{createdAt:'desc'},take}),
   ]);
   const records:ActivityRecord[] = [
@@ -129,6 +129,9 @@ export async function getUserActivity(userId:string,accountMode:AccountMode,cate
       link:notification.actionUrl||'/notifications',
       details:{message:notification.message,accountMode:notification.accountMode||accountMode,isRead:notification.isRead,hasDelivery:Boolean(notification.pushOutbox),relatedEntity:notification.relatedEntity},
     })),
+    ...auditLogs.filter(audit=>audit.entity==='LOGIN').map(audit=>({
+      id:audit.id,category:'security' as const,action:audit.action==='LOGIN_SUCCESS'?'Successful sign-in':audit.action==='LOGOUT_SUCCESS'?'Signed out':'Failed sign-in',timestamp:audit.createdAt.toISOString(),asset:'ACCOUNT',quantity:'0',price:null,amount:'0',status:audit.action==='LOGIN_FAILED'?'FAILED':'SUCCESS',source:'audit' as const,sourceLabel:'Login history',adminInitiated:false,pnl:null,link:'/settings#security',details:{eventType:audit.action},
+    })),
   ];
   const auditByEntity=new Map<string,typeof auditLogs>();
   for(const audit of auditLogs){const key=`${audit.entity}:${audit.entityId}`;const existing=auditByEntity.get(key)||[];existing.push(audit);auditByEntity.set(key,existing)}
@@ -146,7 +149,7 @@ export async function getUserActivity(userId:string,accountMode:AccountMode,cate
   }
   const searchText=query.search?.trim().toLocaleLowerCase();
   const filtered=records.filter(record=>
-    (accountMode!==AccountMode.DEMO||record.source==='notification'||demoVisibleCategories.has(record.category))&&
+    (accountMode!==AccountMode.DEMO||record.source==='notification'||record.source==='audit'||demoVisibleCategories.has(record.category))&&
     (category==='all'||record.category===category||record.category==='trade'&&category==='personal-trade'||record.category==='personal-trade'&&category==='trade')&&
     (!query.status||record.status.toLocaleLowerCase().includes(query.status.toLocaleLowerCase()))&&
     (!query.dateFrom||Date.parse(record.timestamp)>=query.dateFrom.getTime())&&

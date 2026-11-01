@@ -1760,6 +1760,10 @@ test('verified personal details remain read-only during the two-month lock windo
 		await page.goto('/settings');
 		await expect(page.getByRole('status').filter({hasText:'Verified profile details are locked'})).toBeVisible();
 		await expect(page.getByLabel('First name')).toBeDisabled();
+		const avatarInput=page.getByLabel('Choose profile photo');
+		await expect(avatarInput).toBeEnabled();
+		await avatarInput.setInputFiles({name:'avatar.png',mimeType:'image/png',buffer:PNG.sync.write(new PNG({width:1,height:1}))});
+		await expect(page.getByRole('button',{name:'Upload photo'})).toBeEnabled();
 		await expect(page.getByRole('button',{name:'Save profile'})).toBeDisabled();
 		const update=await page.request.patch('/api/profile',{data:{name:'Changed Name',country:'Test',address:'Changed address'}});
 		expect(update.status()).toBe(423);

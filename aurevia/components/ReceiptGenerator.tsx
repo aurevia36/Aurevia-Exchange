@@ -44,6 +44,10 @@ export type ReceiptData={
 	fee?:number|string|null;
 	feeTreatment?:'ADDED'|'DEDUCTED';
 	gateway?:string|null;
+	network?:string|null;
+	referenceInfo?:string|null;
+	senderInfo?:string|null;
+	destinationInfo?:string|null;
 };
 
 const dateLabel=(value:string)=>{
@@ -140,6 +144,12 @@ export default function ReceiptGenerator({receipt}:{receipt:ReceiptData}){
 		{label:'STATUS',value:statusLabel},
 		{label:'DATE & TIME',value:dateLabel(currentReceipt.createdAt)},
 	];
+		if(currentReceipt.network==='BITCOIN_MAINNET'){
+			rows.push({label:'NETWORK',value:'Bitcoin mainnet (BTC)'});
+			if(currentReceipt.referenceInfo)rows.push({label:'DEPOSIT TIME SUBMITTED',value:currentReceipt.referenceInfo});
+			if(currentReceipt.senderInfo)rows.push({label:'SENDER DETAILS · UNVERIFIED',value:currentReceipt.senderInfo});
+			if(currentReceipt.destinationInfo)rows.push({label:'CONFIGURED BTC DESTINATION',value:currentReceipt.destinationInfo});
+		}
 	if(isWithdrawal)rows.splice(1,0,{label:'DESTINATION',value:`${recipientName} · ${recipientNumber}`});
 	if(currentReceipt.processingReference)rows.splice(rows.length-2,0,{label:'PROCESSING REFERENCE',value:currentReceipt.processingReference});
 	if(currentReceipt.creditedAmount!==undefined&&currentReceipt.creditedAmount!==null)rows.splice(2,0,{label:'LEDGER CREDIT',value:amountLabel(currentReceipt.creditedAmount,currentReceipt.creditedCurrency||currentReceipt.currency)});

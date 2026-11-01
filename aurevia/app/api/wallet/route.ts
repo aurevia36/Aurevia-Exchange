@@ -14,6 +14,8 @@ import {createPrivateObjectKey,deletePrivateObject,PrivateStorageError,uploadPri
 import {getRealWithdrawableBalance} from '@/lib/real-withdrawals';
 import {decryptWithdrawalDestination} from '@/lib/withdrawal-destinations';
 import {rateLimit} from '@/lib/rate-limit';
+import {normalizeBitcoinDepositSubmission} from '@/lib/bitcoin-deposit-submission';
+import {SIMULATED_BTC_ADDRESS_SETTING} from '@/lib/config/simulated-bitcoin-address';
 
 const schema=z.object({
 	type:z.nativeEnum(FundingType),
@@ -26,6 +28,10 @@ const schema=z.object({
 	destinationInfo:z.string().trim().max(500).optional(),
 	beneficiaryInfo:z.string().trim().max(300).optional(),
 	network:z.string().trim().max(80).optional(),
+		senderEmail:z.string().trim().email().max(254).optional(),
+		senderWalletName:z.string().trim().max(100).optional(),
+		senderWalletAddress:z.string().trim().max(90).optional(),
+		depositDateTime:z.string().datetime({offset:true}).optional(),
 	note:z.string().trim().max(500).optional(),
 	withdrawalDestinationId:z.string().min(1).max(64).optional(),
 	destinationConfirmed:z.literal(true).optional(),
@@ -104,6 +110,10 @@ export async function POST(req:Request){
 			body=await req.json();
 		}
 		const parsed=schema.parse(body);
+		const hasBitcoinFields=Boolean(parsed.network||parsed.senderEmail||parsed.senderWalletName||parsed.senderWalletAddress||parsed.depositDateTime);
+		if(parsed.type!==FundingType.DEPOSIT&&hasBitcoinFields)throw new Error('BITCOIN_DETAILS_NOT_ALLOWED');
+		const configuredBtcSetting=hasBitcoinFields?await db.systemSetting.findUnique({where:{key:SIMULATED_BTC_ADDRESS_SETTING},select:{value:true}}):null;
+		const bitcoinSubmission=normalizeBitcoinDepositSubmission({network:parsed.network,transactionReference:parsed.transactionReference,senderEmail:parsed.senderEmail,senderWalletName:parsed.senderWalletName,senderWalletAddress:parsed.senderWalletAddress,depositDateTime:parsed.depositDateTime},configuredBtcSetting?.value||null);
 		if(parsed.type===FundingType.WITHDRAWAL&&(!parsed.withdrawalDestinationId||parsed.destinationConfirmed!==true))return NextResponse.json({error:'Select a saved destination and confirm its details.'},{status:400});
 		const idempotencyKey=req.headers.get('Idempotency-Key');
 		if(!idempotencyKey||idempotencyKey.length>128)return NextResponse.json({error:'A valid idempotency key is required.'},{status:400});
@@ -134,7 +144,11 @@ export async function POST(req:Request){
 		const currency='USD';
 		const amount=roundUsdAmount(parsed.amount);
 		if(amount.lte(0))throw new Error('INVALID_AMOUNT');
-		const transactionReference=parsed.transactionReference||null;
+		const transactionReference=bitcoinSubmission?.transactionReference||parsed.transactionReference||null;
+				const referenceInfo=bitcoinSubmission?.referenceInfo??parsed.referenceInfo??null;
+				const senderInfo=bitcoinSubmission?.senderInfo??parsed.senderInfo??null;
+				const destinationInfo=bitcoinSubmission?.destinationInfo??null;
+				const submittedNetwork=bitcoinSubmission?.network??null;
 
 		const result=await db.$transaction(async tx=>{
 			const activeUser=await tx.user.findUnique({where:{id:user.id},select:{accountMode:true,status:true}});
@@ -142,7 +156,7 @@ export async function POST(req:Request){
 			if(activeUser.accountMode!==currentUser.accountMode)throw new Error('ACCOUNT_MODE_CHANGED');
 			const duplicate=await tx.fundingRequest.findUnique({where:{idempotencyKey}});
 			if(duplicate){
-				if(duplicate.userId!==user.id||duplicate.accountMode!==currentUser.accountMode||duplicate.type!==parsed.type||!duplicate.amount.equals(amount)||duplicate.currency!==currency||duplicate.paymentMethodId!==null||duplicate.transactionReference!==transactionReference||duplicate.withdrawalDestinationId!==(destination?.id||null))throw new Error('IDEMPOTENCY_KEY_REUSED');
+				if(duplicate.userId!==user.id||duplicate.accountMode!==currentUser.accountMode||duplicate.type!==parsed.type||!duplicate.amount.equals(amount)||duplicate.currency!==currency||duplicate.paymentMethodId!==null||duplicate.transactionReference!==transactionReference||(duplicate.referenceInfo??null)!==referenceInfo||(duplicate.senderInfo??null)!==senderInfo||(duplicate.destinationInfo??null)!==destinationInfo||(duplicate.network??null)!==(destination?.network||submittedNetwork)||(duplicate.note??null)!==(parsed.note||null)||duplicate.withdrawalDestinationId!==(destination?.id||null))throw new Error('IDEMPOTENCY_KEY_REUSED');
 				return {request:duplicate,replay:true};
 			}
 			const fundingUser=await tx.user.findUniqueOrThrow({where:{id:user.id},select:{kycStatus:true,depositEnabled:true,withdrawalEnabled:true,accountRestricted:true,kyc:{select:{submittedAt:true}},kycDocuments:{where:{kind:'IDENTITY_DOCUMENT',status:'APPROVED'},select:{id:true}}}});
@@ -173,11 +187,11 @@ export async function POST(req:Request){
 				paymentMethodId:null,
 				idempotencyKey,
 				transactionReference,
-				referenceInfo:parsed.referenceInfo||null,
-				senderInfo:parsed.senderInfo||null,
-				destinationInfo:null,
+								referenceInfo,
+								senderInfo,
+								destinationInfo,
 				beneficiaryInfo:null,
-				network:destination?.network||null,
+								network:destination?.network||submittedNetwork,
 				withdrawalDestinationId:destination?.id||null,
 				note:parsed.note||null,
 				receiptKey:receiptKey||null,
@@ -188,6 +202,7 @@ export async function POST(req:Request){
 				ciphertext:destination.ciphertext,iv:destination.iv,authTag:destination.authTag,
 			}});
 			await tx.auditLog.create({data:{actorId:user.id,action:'FUNDING_SUBMITTED',entity:'FUNDING',entityId:request.id,metadata:{type:request.type,accountMode:request.accountMode,currency:request.currency,amount:request.amount.toString(),hasEvidence:!!receiptKey,transactionReference,withdrawalDestinationId:destination?.id||null,withdrawalMethod:destination?.type||null,externalEvidenceUserSubmitted:!!receiptKey||!!transactionReference}}});
+			await tx.auditLog.create({data:{actorId:user.id,action:'FUNDING_SUBMITTED',entity:'FUNDING',entityId:request.id,metadata:{type:request.type,accountMode:request.accountMode,currency:request.currency,amount:request.amount.toString(),hasEvidence:!!receiptKey,transactionReference,network:request.network,hasSenderInfo:!!request.senderInfo,hasDestinationInfo:!!request.destinationInfo,withdrawalDestinationId:destination?.id||null,withdrawalMethod:destination?.type||null,externalEvidenceUserSubmitted:!!receiptKey||!!transactionReference}}});
 			if(receiptKey)await tx.auditLog.create({data:{actorId:user.id,action:'PAYMENT_RECEIPT_UPLOADED',entity:'FUNDING',entityId:request.id,metadata:{accountMode:request.accountMode,...evidenceMetadata}}});
 			const notificationType=request.type===FundingType.DEPOSIT?NotificationType.DEPOSIT:NotificationType.WITHDRAWAL;
 			await createNotification(tx,{userId:user.id,type:notificationType,title:`REAL ${request.type.toLowerCase()} request submitted`,message:request.type===FundingType.WITHDRAWAL?'Your withdrawal request is reserved for administrator review. Approval does not initiate or confirm an external transfer.':'Your request is pending administrator review. This is an internal Aurevia ledger request; no external payment or transfer is initiated.',dedupeKey:`funding:${request.id}:submitted`,relatedEntity:'FUNDING',relatedId:request.id,actionUrl:`/wallet/transactions/${request.id}`});
@@ -206,7 +221,7 @@ export async function POST(req:Request){
 		return NextResponse.json({...jsonSafe(safeRequest),withdrawalDestination,hasReceipt:!!storedReceiptKey,emailDelivery},{status:result.replay?200:201});
 	}catch(error){
 		if(receiptKey&&ownerId)await deletePrivateObject('receipt',ownerId,receiptKey);
-		if(error instanceof ZodError)return NextResponse.json({error:'Funding requests must use USD. Check the request details and try again.'},{status:400});
+		if(error instanceof ZodError)return NextResponse.json({error:'Check the funding amount and request details, including any BTC network fields.'},{status:400});
 		if(error instanceof FundingEvidenceError)return NextResponse.json({error:error.message},{status:error.status});
 		if(error instanceof PrivateStorageError)return NextResponse.json({error:error.message},{status:error.status});
 		if(error instanceof Prisma.PrismaClientKnownRequestError&&error.code==='P2002')return NextResponse.json({error:'This submission was already received.'},{status:409});
@@ -216,8 +231,8 @@ export async function POST(req:Request){
 		if(error instanceof Error&&error.message==='WITHDRAWAL_DESTINATION_ENCRYPTION_KEY_REQUIRED')return NextResponse.json({error:'Secure destination storage is not configured. Contact Aurevia support.'},{status:503});
 		if(error instanceof Error&&error.message==='WITHDRAWAL_DESTINATION_DECRYPTION_FAILED')return NextResponse.json({error:'The saved destination could not be verified. Contact Aurevia support.'},{status:503});
 		if(error&&typeof error==='object'&&'code'in error&&String(error.code)==='P2034')return NextResponse.json({error:'The account changed while submitting this request. Refresh and try again.'},{status:409});
-		const known=['IDEMPOTENCY_KEY_REUSED','PAYMENT_METHOD_UNAVAILABLE','AMOUNT_OUT_OF_RANGE','PAYMENT_INSTRUCTIONS_UNAVAILABLE','WITHDRAWAL_DESTINATION_REQUIRED','WITHDRAWAL_NETWORK_REQUIRED','INSUFFICIENT_AVAILABLE_BALANCE','DEPOSITS_DISABLED','WITHDRAWAL_DISABLED','ACCOUNT_RESTRICTED','REAL_KYC_REQUIRED','INVALID_AMOUNT','FIRST_TRADE_REQUIRED'];
-		if(error instanceof Error&&known.includes(error.message))return NextResponse.json({error:error.message.replaceAll('_',' ').toLowerCase()},{status:error.message==='IDEMPOTENCY_KEY_REUSED'?409:error.message==='DEPOSITS_DISABLED'||error.message==='ACCOUNT_RESTRICTED'||error.message==='WITHDRAWAL_DISABLED'||error.message==='REAL_KYC_REQUIRED'||error.message==='FIRST_TRADE_REQUIRED'?403:400});
+		const known=['IDEMPOTENCY_KEY_REUSED','PAYMENT_METHOD_UNAVAILABLE','AMOUNT_OUT_OF_RANGE','PAYMENT_INSTRUCTIONS_UNAVAILABLE','WITHDRAWAL_DESTINATION_REQUIRED','WITHDRAWAL_NETWORK_REQUIRED','INSUFFICIENT_AVAILABLE_BALANCE','DEPOSITS_DISABLED','WITHDRAWAL_DISABLED','ACCOUNT_RESTRICTED','REAL_KYC_REQUIRED','INVALID_AMOUNT','FIRST_TRADE_REQUIRED','BITCOIN_DETAILS_NOT_ALLOWED','BITCOIN_NETWORK_REQUIRED','BTC_DESTINATION_NOT_CONFIGURED','INVALID_BTC_TXID','INVALID_BTC_SENDER_ADDRESS'];
+		if(error instanceof Error&&known.includes(error.message))return NextResponse.json({error:error.message.replaceAll('_',' ').toLowerCase()},{status:error.message==='IDEMPOTENCY_KEY_REUSED'?409:error.message==='BTC_DESTINATION_NOT_CONFIGURED'?503:error.message==='DEPOSITS_DISABLED'||error.message==='ACCOUNT_RESTRICTED'||error.message==='WITHDRAWAL_DISABLED'||error.message==='REAL_KYC_REQUIRED'||error.message==='FIRST_TRADE_REQUIRED'?403:400});
 		const code=error&&typeof error==='object'&&'code' in error?String(error.code):'';
 		if(['P1001','P1002','P1017','P2021','P2022'].includes(code))return NextResponse.json({error:'Funding service is temporarily unavailable.'},{status:503});
 		console.error(`Funding request failed (${/^[A-Z0-9_]{2,32}$/.test(code)?code:error instanceof Error?error.name:'UnknownError'}).`);

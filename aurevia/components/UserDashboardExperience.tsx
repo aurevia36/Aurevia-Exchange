@@ -10,6 +10,7 @@ import Nav from '@/components/Nav';
 import ProfileAvatar from '@/components/ProfileAvatar';
 import NewsFeedPanel from '@/components/NewsFeedPanel';
 import LivePriceChart from '@/components/LivePriceChart';
+import LocalClockCalendar from '@/components/LocalClockCalendar';
 import {InvestmentProgressCard} from '@/components/InvestmentProgressCard';
 import DemoAiTradingPanel from '@/components/DemoAiTradingPanel';
 import DemoAccountControls from '@/components/DemoAccountControls';
@@ -332,6 +333,7 @@ export default function UserDashboardExperience(){
 					</section>}
 				</div>
 				<aside className="user-dashboard-rail" aria-label="Account tools and updates">
+					<LocalClockCalendar/>
 					<section className="user-dashboard-panel user-wallet-panel" aria-labelledby="user-wallet-heading"><header className="user-dashboard-panel-heading"><div><span className="user-dashboard-eyebrow">{overview.accountMode} WALLET</span><h2 id="user-wallet-heading">{overview.accountMode==='DEMO'?'Virtual cash':'My wallet'}</h2></div><WalletCards size={18}/></header><strong>{formatUsd(overview.portfolioSummary.cashBalance)}</strong><p>{overview.accountMode==='DEMO'?'Available simulated trading cash':'Available internal USD ledger balance'}</p>{overview.accountMode==='REAL'&&<div className="user-wallet-actions"><Link href="/wallet?type=DEPOSIT"><ArrowDownLeft size={14}/>Deposit</Link><Link href="/wallet?type=WITHDRAWAL"><ArrowUpRight size={14}/>Withdraw</Link></div>}</section>
 					<section className="user-dashboard-panel" aria-labelledby="user-quick-heading"><header className="user-dashboard-panel-heading"><div><span className="user-dashboard-eyebrow">YOUR WORKSPACE</span><h2 id="user-quick-heading">Quick actions</h2></div></header><div className="user-quick-actions"><QuickAction href="/trade" label="Trade markets" icon={Activity}/>{overview.accountMode==='REAL'&&<><QuickAction href="/investments" label="Explore investments" icon={BriefcaseBusiness}/><QuickAction href="/wallet" label="Manage wallet" icon={WalletCards}/><QuickAction href="/kyc" label="Identity verification" icon={ShieldCheck}/></>}</div></section>
 					<section className="user-dashboard-panel" aria-labelledby="user-activity-heading"><header className="user-dashboard-panel-heading"><div><span className="user-dashboard-eyebrow">ACCOUNT RECORDS</span><h2 id="user-activity-heading">Recent activity</h2></div><Link className="user-dashboard-panel-link" href="/activity">View all <ArrowRight size={14}/></Link></header>					<ActivityList items={overview.accountMode==='DEMO'?overview.recentActivity.filter(item=>['trade','personal-trade','order','position'].includes(item.category)):overview.recentActivity}/></section>

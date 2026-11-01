@@ -7,6 +7,7 @@ import {Activity,Archive,ArrowUpRight,Building2,CircleDollarSign,Landmark,Receip
 import Nav from '@/components/Nav';
 import DisplayCurrencyPanel from '@/components/DisplayCurrencyPanel';
 import {activityCategoryLabel,type ActivityCategory,type ActivityRecord} from '@/lib/activity';
+import {groupByLocalDate,localDateBoundary} from '@/lib/local-date';
 import {formatUsd} from '@/lib/currency-format';
 
 const categories:ActivityCategory[]=['all','trade','personal-trade','investment','deposit','withdrawal','order','position','account','security'];
@@ -39,8 +40,8 @@ export default function AccountActivityExperience(){
       const params=new URLSearchParams({category,limit:'30',offset:String(offset),state});
       if(search.trim())params.set('search',search.trim());
       if(statusFilter)params.set('status',statusFilter);
-      if(dateFrom)params.set('dateFrom',dateFrom);
-      if(dateTo)params.set('dateTo',`${dateTo}T23:59:59.999`);
+      if(dateFrom){const boundary=localDateBoundary(dateFrom);if(boundary)params.set('dateFrom',boundary)}
+      if(dateTo){const boundary=localDateBoundary(dateTo,true);if(boundary)params.set('dateTo',boundary)}
       const response=await fetch(`/api/activity?${params.toString()}`,{cache:'no-store'});
       const body=await response.json();
       if(!response.ok)throw new Error(body.error||'Unable to load account activity.');
@@ -85,6 +86,8 @@ export default function AccountActivityExperience(){
     finally{setBusy(false)}
   }
   const displayValues=(data?.data.items||[]).filter(item=>item.source!=='notification'&&(item.source!=='ledger'||item.asset==='USD')&&(item.source!=='order'||Number(item.details.filledQuantity)>0)).slice(0,5).map(item=>({label:item.action,amount:item.amount}));
+  const groupedActivity=groupByLocalDate(data?.data.items||[]);
+  const activityRows=groupedActivity.map(group=><div key={group.key}><h3 className="px-4 py-2 text-xs font-semibold muted">{group.label}</h3>{group.items.map(item=><ActivityRow key={`${item.source}:${item.id}`} item={item} selected={selected.has(recordKey(item))} onSelect={()=>toggleSelected(item)}/>)}</div>);
 
   return <><Nav/><main className="account-page activity-page">
     <header className="account-heading"><div><span className="account-kicker">AUDITABLE ACTIVITY · {session?.user?.accountMode||'ACCOUNT'}</span><h1>Account activity</h1><p>Orders, trades, investments, funding, positions, and account events from persisted records.</p></div><div className="flex items-center gap-2"><span className={`status-pill ${session?.user?.accountMode==='REAL'?'mode-real':'mode-demo'}`}>{session?.user?.accountMode||'ACCOUNT'}</span><button className="icon-action" type="button" aria-label="Refresh account activity" onClick={toggleLoading} disabled={loading}><RefreshCw size={15} className={loading?'animate-spin':''}/></button></div></header>
@@ -111,7 +114,7 @@ export default function AccountActivityExperience(){
     </section>
     <section className="account-panel card mt-4 overflow-hidden">
       <div className="account-panel-title px-4 pt-4"><div><h2>{data?.categoryLabel||activityCategoryLabel(category)}</h2><p className="account-panel-subtitle">{data?`${data.data.total} recorded entries`:'Loading persisted activity'}</p></div><span className={`status-pill ${data?.accountMode==='REAL'?'mode-real':'mode-demo'}`}>{data?.accountMode||'ACCOUNT'}</span></div>
-      {loading&&!data?<div className="account-empty" role="status">Loading account activity…</div>:data?.data.items.length?<div className="activity-feed">{data.data.items.map(item=><ActivityRow key={`${item.source}:${item.id}`} item={item} selected={selected.has(recordKey(item))} onSelect={()=>toggleSelected(item)}/>)}</div>:<div className="account-empty"><Activity size={22} className="mx-auto mb-3 gold"/><p>No activity matches this filter.</p><small>Financial and security records remain protected even when hidden from this feed.</small></div>}
+      {loading&&!data?<div className="account-empty" role="status">Loading account activity…</div>:data?.data.items.length?<div className="activity-feed">{activityRows}</div>:<div className="account-empty"><Activity size={22} className="mx-auto mb-3 gold"/><p>No activity matches this filter.</p><small>Financial and security records remain protected even when hidden from this feed.</small></div>}
       {data&&<div className="activity-pagination"><span>Showing {data.data.items.length} of {data.data.total} loaded matches</span>{data.data.hasMore&&<button type="button" className="button-secondary" onClick={()=>void load(false,data.data.items.length,true)} disabled={loading}>Load more <ArrowUpRight size={13}/></button>}</div>}
     </section>
   </main></>;
@@ -126,7 +129,7 @@ function ActivityRow({item,selected,onSelect}:{item:ActivityRecord;selected:bool
   const pnl=item.pnl===null?null:formatUsd(Math.abs(Number(item.pnl)));
   const hasVisibilityState=item.archivedAt||item.hidden;
   const isNotification=item.source==='notification';
-  return <article className="activity-feed-row activity-managed-row"><label className="flex items-center"><input type="checkbox" checked={selected} onChange={onSelect} aria-label={`Select ${item.action}`}/></label><span className={`activity-icon activity-${item.category}`}><Icon size={16} aria-hidden="true"/></span><div className="activity-feed-main"><div><b>{item.action}</b><span>{item.asset}</span>{item.side&&<em>{item.side}</em>}{item.adminInitiated&&<small>ADMIN-INITIATED</small>}{hasVisibilityState&&<small>{item.hidden?'REMOVED FROM FEED':'ARCHIVED'}</small>}{item.permanentDeletionAllowed&&<small>ELIGIBLE FOR PERMANENT DELETION</small>}</div><p>{item.sourceLabel} · {statusLabel(item.status)}</p><details><summary>Details</summary><dl>{!isNotification&&<><Detail label="Amount" value={amount}/><Detail label="Quantity" value={item.quantity}/><Detail label="Price" value={price}/></>}<Detail label="Status" value={item.status}/><Detail label="Source" value={item.sourceLabel}/>{isNotification&&typeof item.details.message==='string'&&<Detail label="Message" value={item.details.message}/>}<Detail label="Retention" value={item.protectionReason||'Financial and business records are retained.'}/>{pnl!==null&&<Detail label="P/L" value={pnl}/>}</dl></details></div><div className="activity-feed-meta"><time dateTime={item.timestamp}>{formatTime(item.timestamp)}</time><b className={positive?'text-profit':item.pnl===null?'':'text-loss'}>{pnl===null?'':`${positive?'+':'−'}${pnl}`}</b><Link href={item.link} aria-label={`Open ${item.action} details`}><ArrowUpRight size={14}/></Link></div></article>;
+  return <article className="activity-feed-row activity-managed-row"><label className="flex items-center"><input type="checkbox" checked={selected} onChange={onSelect} disabled={item.source==='audit'} aria-label={`Select ${item.action}`}/></label><span className={`activity-icon activity-${item.category}`}><Icon size={16} aria-hidden="true"/></span><div className="activity-feed-main"><div><b>{item.action}</b><span>{item.asset}</span>{item.side&&<em>{item.side}</em>}{item.adminInitiated&&<small>ADMIN-INITIATED</small>}{hasVisibilityState&&<small>{item.hidden?'REMOVED FROM FEED':'ARCHIVED'}</small>}{item.permanentDeletionAllowed&&<small>ELIGIBLE FOR PERMANENT DELETION</small>}</div><p>{item.sourceLabel} · {statusLabel(item.status)}</p><details><summary>Details</summary><dl>{!isNotification&&<><Detail label="Amount" value={amount}/><Detail label="Quantity" value={item.quantity}/><Detail label="Price" value={price}/></>}<Detail label="Status" value={item.status}/><Detail label="Source" value={item.sourceLabel}/>{isNotification&&typeof item.details.message==='string'&&<Detail label="Message" value={item.details.message}/>}<Detail label="Retention" value={item.protectionReason||'Financial and business records are retained.'}/>{pnl!==null&&<Detail label="P/L" value={pnl}/>}</dl></details></div><div className="activity-feed-meta"><time dateTime={item.timestamp}>{formatTime(item.timestamp)}</time><b className={positive?'text-profit':item.pnl===null?'':'text-loss'}>{pnl===null?'':`${positive?'+':'−'}${pnl}`}</b><Link href={item.link} aria-label={`Open ${item.action} details`}><ArrowUpRight size={14}/></Link></div></article>;
 }
 
 function Detail({label,value}:{label:string;value:string}){return <div><dt>{label}</dt><dd>{value}</dd></div>}
