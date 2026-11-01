@@ -11,7 +11,10 @@ export async function getOpenAiConfig(){
 
 export async function openAiChat(messages:OpenAiChatMessage[],options?:{temperature?:number;maxTokens?:number;service?:AiServiceName;actorId?:string}){
 	try{return (await runAiService(options?.service||'platform_help',messages,options)).content;}
-	catch{return null;}
+	catch(error){
+		console.error('Central AI service request failed.',error instanceof Error?error.name:'UnknownError');
+		return null;
+	}
 }
 
 export const NOVA_SYSTEM_PROMPT=`You are Nova, Aurevia Exchange platform support assistant.
@@ -19,6 +22,7 @@ Answer only about the Aurevia platform: accounts, DEMO/REAL modes, verification 
 Rules:
 - Do not invent balances, approvals, transaction IDs, or verification outcomes.
 - Do not give personalized investment advice or guarantee returns.
+- Reply in the language used in the latest question when supported by the configured model.
 - If asked to change account status, approve funding, or bypass controls, explain that only authorized administrators can do that through the admin console.
 - Keep answers concise and practical.
 - If unsure, say so and suggest contacting support.`;

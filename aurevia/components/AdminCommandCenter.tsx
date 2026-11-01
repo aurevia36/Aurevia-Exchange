@@ -6,7 +6,8 @@ import {Activity,AlertTriangle,Check,ExternalLink,KeyRound,RefreshCw,ShieldCheck
 type Status='CONNECTED'|'MISSING_CREDENTIALS'|'CONFIGURATION_REQUIRED'|'CONNECTION_FAILED'|'PROVIDER_UNAVAILABLE'|'PENDING_ADMIN_APPROVAL'|'NOT_CONFIGURED';
 type Integration={id:string;name:string;status:Status;detail:string;feature:string;documentation:string;checkedAt:string;canTest:boolean};
 type AiProvider={provider:string;status:Status;model:string|null;availableModels:number};
-type CommandData={checkedAt:string;integrations:Integration[];ai:{configuredProvider:string;configuredModel:string;activeProvider:string|null;activeModel:string|null;providers:AiProvider[];backupProviders:string[]};usage:{window:string;requests:number;succeeded:number;failed:number;totalTokens:number;rateLimit:string;recent:Array<{id:string;action:string;metadata:Record<string,unknown>;createdAt:string}>};healthHistory:Array<{id:string;action:string;metadata:Record<string,unknown>;createdAt:string}>;approvalQueue:Array<{id:string;provider:string;submittedBy:string;submittedAt:string|null;status:string}>};
+type AiFeature={id:string;label:string;description:string;enabled:boolean};
+type CommandData={checkedAt:string;integrations:Integration[];ai:{configuredProvider:string;configuredModel:string;activeProvider:string|null;activeModel:string|null;providers:AiProvider[];backupProviders:string[]};aiFeatures:AiFeature[];usage:{window:string;requests:number;succeeded:number;failed:number;totalTokens:number;rateLimit:string;recent:Array<{id:string;action:string;metadata:Record<string,unknown>;createdAt:string}>};healthHistory:Array<{id:string;action:string;metadata:Record<string,unknown>;createdAt:string}>;approvalQueue:Array<{id:string;provider:string;submittedBy:string;submittedAt:string|null;status:string}>};
 
 const statusClass=(status:Status)=>status==='CONNECTED'?'is-connected':status==='MISSING_CREDENTIALS'||status==='NOT_CONFIGURED'?'is-missing':status==='PENDING_ADMIN_APPROVAL'?'is-pending':'is-attention';
 
@@ -72,6 +73,18 @@ export default function AdminCommandCenter(){
 		finally{setBusy('')}
 	}
 
+	async function updateAiFeature(feature:AiFeature){
+		setBusy(feature.id);setError('');setNotice('');
+		try{
+			const response=await fetch('/api/admin/command-center/ai-features',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({feature:feature.id,enabled:!feature.enabled})});
+			const result=await response.json();
+			if(!response.ok)throw new Error(result.error||'Unable to update the AI feature.');
+			setData(current=>current?{...current,aiFeatures:current.aiFeatures.map(item=>item.id===feature.id?result.feature:item)}:current);
+			setNotice(`${feature.label} ${feature.enabled?'disabled':'enabled'}.`);
+		}catch(exception){setError(exception instanceof Error?exception.message:'Unable to update the AI feature.')}
+		finally{setBusy('')}
+	}
+
 	async function askAssistant(event:React.FormEvent<HTMLFormElement>){
 		event.preventDefault();
 		setBusy('assistant');setError('');setAssistantAnswer('');
@@ -95,6 +108,13 @@ export default function AdminCommandCenter(){
 		<section className="admin-command-center-section" aria-labelledby="ai-provider-heading">
 			<header><div><h2 id="ai-provider-heading">AI provider health</h2><p>Provider/model catalog checks use authentication and free-model availability; no paid-model fallback is permitted.</p></div><button className="btn min-h-11 bg-white/5" type="button" onClick={()=>void load()} disabled={loading}><RefreshCw size={15}/>{loading?'Checking…':'Refresh all'}</button></header>
 			<div className="admin-command-center-ai-grid">{data?.ai.providers.map(item=><article key={item.provider}><div><b>{item.provider}</b><span className={`admin-integration-status ${statusClass(item.status)}`}>{item.status.replaceAll('_',' ')}</span></div><p>{item.model||'No approved free model selected'}</p><small>{item.availableModels} available free/eligible models</small></article>)}</div>
+		</section>
+		<section className="admin-command-center-section" aria-labelledby="ai-features-heading">
+			<header><div><h2 id="ai-features-heading">AI feature controls</h2><p>Changes are audited. Disabled services cannot send requests through the central AI gateway.</p></div><ShieldCheck size={18}/></header>
+			<div className="admin-integration-grid">{data?.aiFeatures.map(feature=><article className="admin-integration-card" key={feature.id}>
+				<div className="admin-integration-card-heading"><h3>{feature.label}</h3><span className={`admin-integration-status ${feature.enabled?'is-connected':'is-missing'}`}>{feature.enabled?'ENABLED':'DISABLED'}</span></div>
+				<p>{feature.description}</p><footer><button type="button" onClick={()=>void updateAiFeature(feature)} disabled={busy===feature.id}>{busy===feature.id?'Saving…':feature.enabled?'Disable':'Enable'}</button></footer>
+			</article>)}</div>
 		</section>
 		<section className="admin-command-center-section" aria-labelledby="integration-heading">
 			<header><div><h2 id="integration-heading">API integration inventory</h2><p>Connectivity is only marked connected after a successful read-only check.</p></div></header>

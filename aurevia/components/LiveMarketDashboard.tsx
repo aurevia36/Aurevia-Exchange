@@ -5,7 +5,7 @@ import {useSearchParams} from 'next/navigation';
 import {QueryClient,QueryClientProvider,useQuery} from '@tanstack/react-query';
 import {useSession} from 'next-auth/react';
 import {io,type Socket} from 'socket.io-client';
-import {Activity,ArrowLeftRight,Check,ChevronDown,GripVertical,ListPlus,Plus,RefreshCw,Search,Star,Trash2,X} from 'lucide-react';
+import {Activity,ArrowLeftRight,Check,ChevronDown,GripVertical,ListPlus,Plus,RefreshCw,Search,Sparkles,Star,Trash2,X} from 'lucide-react';
 import Nav from '@/components/Nav';
 import LivePriceChart from '@/components/LivePriceChart';
 import {COMPARISON_SYMBOLS,DEFAULT_WATCHLIST,MARKET_ASSETS,TIMEFRAMES,getMarketAsset,type MarketCandle,type MarketQuote,type TimeframeId} from '@/lib/live-market';
@@ -15,6 +15,7 @@ type QuoteError={asset:NonNullable<ReturnType<typeof getMarketAsset>>;error:stri
 type QuotesResponse={quotes:Array<MarketQuote|QuoteError>;source:string};
 type HistoryResponse={quote:MarketQuote;candles:MarketCandle[];timeframe:TimeframeId;interval:string;source?:string};
 type ReturnMetric={label:string;days:number;value:number|null};
+type MarketAnalysis={summary:string;observations:Array<{symbol:string;observation:string}>;caveat:string};
 type MarketCategory='Favorites'|'Forex'|'Crypto'|'Stocks'|'Indices';
 
 const TICKER_SYMBOLS=['BTC','DJI','MERV','DAX','IBEX','NIKKEI','EURGBP','SPX','NASDAQ'];
@@ -51,6 +52,10 @@ function LiveMarketDashboardContent(){
   const [draggedSymbol,setDraggedSymbol]=useState('');
   const [watchlistScopeReady,setWatchlistScopeReady]=useState(false);
   const [watchlistScopeError,setWatchlistScopeError]=useState('');
+  const [marketAnalysis,setMarketAnalysis]=useState<MarketAnalysis|null>(null);
+  const [marketAnalysisSources,setMarketAnalysisSources]=useState<Array<{symbol:string;name:string;provider:string;quotedAt:string}>>([]);
+  const [marketAnalysisError,setMarketAnalysisError]=useState('');
+  const [marketAnalysisBusy,setMarketAnalysisBusy]=useState(false);
   const activeList=watchlists.find(list=>list.id===activeWatchlistId)||watchlists[0];
   const selectedAsset=getMarketAsset(selectedSymbol)||getMarketAsset('DJI')!;
   const quoteIds=Array.from(new Set([...activeList.symbols,...DEFAULT_WATCHLIST,...COMPARISON_SYMBOLS,selectedAsset.id]));
@@ -131,6 +136,25 @@ function LiveMarketDashboardContent(){
     const source=event.dataTransfer.getData('text/plain')||draggedSymbol;
     if(source)reorderSymbol(source,target);
     setDraggedSymbol('');
+  }
+
+  async function analyzeMarket(){
+    setMarketAnalysisBusy(true);
+    setMarketAnalysis(null);
+    setMarketAnalysisSources([]);
+    setMarketAnalysisError('');
+    try{
+      const symbols=[...new Set([selectedAsset.id,...activeList.symbols])].slice(0,6);
+      const response=await fetch('/api/market/analysis',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({symbols})});
+      const result=await response.json();
+      if(!response.ok)throw new Error(result.error||'Market analysis is unavailable.');
+      setMarketAnalysis(result.analysis as MarketAnalysis);
+      setMarketAnalysisSources(Array.isArray(result.quotes)?result.quotes:[]);
+    }catch(exception){
+      setMarketAnalysisError(exception instanceof Error?exception.message:'Market analysis is unavailable.');
+    }finally{
+      setMarketAnalysisBusy(false);
+    }
   }
 
   const filteredAssets=MARKET_ASSETS.filter(asset=>!activeList.symbols.includes(asset.id)&&`${asset.id} ${asset.name} ${asset.ticker}`.toLowerCase().includes(symbolSearch.toLowerCase())).slice(0,7);
@@ -226,6 +250,20 @@ function LiveMarketDashboardContent(){
             <span className="live-market-open-state"><i/> {marketOpenLabel(selectedAsset.type)}</span>
           </div>
           <div className="live-chart-metadata"><span>{activeQuote?.isStale?'Last quote · STALE': 'Last quote'} {activeQuote?formatTime(activeQuote.updatedAt):'—'}</span><span>Quote source <b>{activeQuote?.source||'Unavailable'}</b></span><span>Chart source <b>{historyQuery.data?.source||'Loading'}</b></span><button type="button" className="live-refresh-button" aria-label="Refresh quotes" onClick={()=>{void selectedQuery.refetch();void batchQuery.refetch();void historyQuery.refetch()}}><RefreshCw size={13} className={selectedQuery.isFetching?'is-spinning':''}/> Refresh</button></div>
+          {session?.user?.id&&<section className="live-market-ai" aria-label="AI market context">
+            <button type="button" className="btn bg-white/5" onClick={()=>void analyzeMarket()} disabled={marketAnalysisBusy}>
+              {marketAnalysisBusy?<RefreshCw size={14} className="is-spinning"/>:<Sparkles size={14}/>}
+              {marketAnalysisBusy?'Analyzing provider quotes…':'Explain provider quotes'}
+            </button>
+            {marketAnalysisError&&<p className="live-data-alert" role="alert">{marketAnalysisError}</p>}
+            {marketAnalysis&&<div className="live-data-alert" aria-live="polite">
+              <strong>Generated market context</strong>
+              <p>{marketAnalysis.summary}</p>
+              {marketAnalysis.observations.length>0&&<ul>{marketAnalysis.observations.map(item=><li key={item.symbol}><b>{item.symbol}:</b> {item.observation}</li>)}</ul>}
+              <p>{marketAnalysis.caveat}</p>
+              <small>Quote sources: {marketAnalysisSources.map(item=>`${item.name} (${item.provider}, ${formatTime(item.quotedAt)})`).join('; ')}.</small>
+            </div>}
+          </section>}
           <div className="live-timeframes" role="group" aria-label="Chart interval">{TIMEFRAMES.map(item=><button type="button" key={item.id} className={timeframe===item.id?'is-active':''} aria-pressed={timeframe===item.id} onClick={()=>setTimeframe(item.id)}>{item.label}</button>)}</div>
           <LivePriceChart candles={historyQuery.data?.candles||[]} quote={activeQuote} timeframe={timeframe} loading={historyQuery.isLoading} error={historyQuery.error instanceof Error?historyQuery.error.message:''}/>
           {error&&<div className="live-data-alert" role="alert">The chart could not be updated. Available historical data is preserved. <button type="button" onClick={()=>void historyQuery.refetch()}>Retry</button></div>}

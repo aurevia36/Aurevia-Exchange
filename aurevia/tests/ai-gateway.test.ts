@@ -47,6 +47,21 @@ describe('central AI gateway',()=>{
 		expect(fetcher).not.toHaveBeenCalled();
 	});
 
+	it('caches identical requests briefly without counting cached tokens as new usage',async()=>{
+		vi.stubEnv('OPENROUTER_API_KEY','private-test-key');
+		const fetcher=vi.fn()
+			.mockResolvedValueOnce(new Response(JSON.stringify({data:[{id:'test/free-model',pricing:{prompt:'0',completion:'0'}}]}),{status:200}))
+			.mockResolvedValueOnce(new Response(JSON.stringify({model:'test/free-model',choices:[{message:{content:'Generated analysis.'}}],usage:{prompt_tokens:12,completion_tokens:5,total_tokens:17}}),{status:200}));
+		vi.stubGlobal('fetch',fetcher);
+		const {aiChat}=await import('@/lib/ai-gateway');
+		const first=await aiChat([{role:'user',content:'same request'}],{service:'unit-test',actorId:'user-a'});
+		const second=await aiChat([{role:'user',content:'same request'}],{service:'unit-test',actorId:'user-a'});
+		expect(second.content).toBe(first.content);
+		expect(second.usage).toEqual({promptTokens:null,completionTokens:null,totalTokens:null});
+		expect(fetcher).toHaveBeenCalledTimes(2);
+		expect(auditCreate).toHaveBeenLastCalledWith(expect.objectContaining({data:expect.objectContaining({metadata:expect.objectContaining({cacheHit:true,totalTokens:null})})}));
+	});
+
 	it('reports an approved encrypted backup credential only after its free model is verified',async()=>{
 		vi.stubEnv('AI_BACKUP_PROVIDERS','gemini');
 		vi.stubEnv('GEMINI_FREE_MODEL','gemini-2.0-flash');

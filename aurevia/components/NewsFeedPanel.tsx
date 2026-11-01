@@ -1,7 +1,7 @@
 'use client';
 
 import {useCallback,useEffect,useState} from 'react';
-import {ExternalLink,LoaderCircle,Newspaper,RefreshCw} from 'lucide-react';
+import {ExternalLink,LoaderCircle,Newspaper,RefreshCw,Sparkles} from 'lucide-react';
 
 type FeedItem={
 	id:string;
@@ -26,6 +26,13 @@ type FeedResponse={
 	sources:Array<{key:string;displayName:string;category:string}>;
 	error?:string;
 };
+type NewsAnalysis={
+	overallSentiment:'positive'|'neutral'|'negative'|'mixed';
+	summary:string;
+	articles:Array<{id:string;sentiment:'positive'|'neutral'|'negative'|'mixed';observation:string}>;
+	caveat:string;
+};
+type NewsArticleSource={id:string;title:string;canonicalUrl:string;publisher:string;publishedAt:string|null};
 
 function formatWhen(value:string|null){
 	if(!value)return '';
@@ -40,6 +47,11 @@ export default function NewsFeedPanel({compact=false}:{compact?:boolean}){
 	const [error,setError]=useState('');
 	const [category,setCategory]=useState('');
 	const [page,setPage]=useState(1);
+	const [analysis,setAnalysis]=useState<NewsAnalysis|null>(null);
+	const [analysisSources,setAnalysisSources]=useState<NewsArticleSource[]>([]);
+	const [analysisIsStale,setAnalysisIsStale]=useState(false);
+	const [analysisError,setAnalysisError]=useState('');
+	const [analysisBusy,setAnalysisBusy]=useState(false);
 
 	const load=useCallback(async(nextPage=1,append=false)=>{
 		setLoading(true);
@@ -64,6 +76,20 @@ export default function NewsFeedPanel({compact=false}:{compact?:boolean}){
 		}
 	},[category,compact]);
 
+	async function analyzeNews(){
+		setAnalysisBusy(true);setAnalysisError('');setAnalysis(null);setAnalysisSources([]);setAnalysisIsStale(false);
+		try{
+			const response=await fetch('/api/news-feed/analysis',{method:'POST',headers:{'content-type':'application/json'},body:'{}'});
+			const result=await response.json();
+			if(!response.ok)throw new Error(result.error||'News analysis is unavailable.');
+			setAnalysis(result.analysis as NewsAnalysis);
+			setAnalysisSources(Array.isArray(result.articleSources)?result.articleSources as NewsArticleSource[]:[]);
+			setAnalysisIsStale(result.sourceDataStale===true);
+		}catch(exception){
+			setAnalysisError(exception instanceof Error?exception.message:'News analysis is unavailable.');
+		}finally{setAnalysisBusy(false)}
+	}
+
 	useEffect(()=>{void load(1,false)},[load]);
 
 	useEffect(()=>{
@@ -79,6 +105,7 @@ export default function NewsFeedPanel({compact=false}:{compact?:boolean}){
 					<h2 className="news-feed-title"><Newspaper size={20} aria-hidden="true"/> News & updates</h2>
 				</div>
 				<div className="news-feed-tools">
+					{!compact&&<button type="button" className="btn bg-white/5" onClick={()=>void analyzeNews()} disabled={analysisBusy}><Sparkles size={14}/>{analysisBusy?'Analyzing…':'Analyze sentiment'}</button>}
 					<label className="sr-only" htmlFor="news-category">Category</label>
 					<select id="news-category" className="input news-feed-select" value={category} onChange={event=>{setCategory(event.target.value);}}>
 						<option value="">All categories</option>
@@ -91,6 +118,18 @@ export default function NewsFeedPanel({compact=false}:{compact?:boolean}){
 					</button>
 				</div>
 			</header>
+
+			{analysisError&&<p className="news-feed-state is-error" role="alert">{analysisError}</p>}
+			{analysis&&<section className="account-callout mb-4" aria-label="AI news sentiment analysis" aria-live="polite">
+				<strong>Generated news sentiment · {analysis.overallSentiment}</strong>
+				<p>{analysis.summary}</p>
+				{analysis.articles.length>0&&<ul>{analysis.articles.map(article=>{
+					const source=analysisSources.find(item=>item.id===article.id);
+					return <li key={article.id}>{source?<a href={source.canonicalUrl} target="_blank" rel="noopener noreferrer">{source.publisher}: {source.title}</a>:null} · {article.sentiment}: {article.observation}</li>;
+				})}</ul>}
+				<p>{analysis.caveat} Sentiment is article framing, not a market signal or recommendation.</p>
+				{analysisIsStale&&<p role="status">One or more analyzed news sources may be stale; check the original publisher links.</p>}
+			</section>}
 
 			{data?.stale&&<p className="news-feed-banner" role="status">Source data may be outdated. Last successful sync: {formatWhen(data.lastSuccessAt)||'unknown'}.</p>}
 			{loading&&!data&&<p className="news-feed-state" role="status">Loading external headlines…</p>}

@@ -1,4 +1,5 @@
 import {z} from 'zod';
+import {createHash} from 'node:crypto';
 import {db} from '@/lib/db';
 import {getApprovedAiCredential} from '@/lib/ai-credential-vault';
 
@@ -21,6 +22,9 @@ const optionsSchema=z.object({
 const timeoutMs=12_000;
 const modelCatalogCache=new Map<AiProvider,{expiresAt:number;models:ProviderModel[]}>();
 const modelCatalogRequests=new Map<AiProvider,Promise<ProviderModel[]>>();
+const completionCache=new Map<string,{expiresAt:number;result:AiResult}>();
+const completionCacheTtlMs=30_000;
+const completionCacheLimit=256;
 type ProviderModel={id:string;free:boolean};
 type ProviderResponse={content:string;model:string;usage:AiUsage};
 
@@ -126,6 +130,20 @@ function approvedFreeModel(provider:AiProvider,models:ProviderModel[],configured
 
 function openAiCompatibleMessages(messages:AiMessage[]){return messages.map(({role,content})=>({role,content}));}
 
+function completionCacheKey(messages:AiMessage[],options:z.infer<typeof optionsSchema>){
+	return createHash('sha256').update(JSON.stringify({
+		messages,
+		service:options.service||'unspecified',
+		actorId:options.actorId||null,
+		temperature:options.temperature??0.4,
+		maxTokens:options.maxTokens??700,
+		provider:selectedProvider(),
+		model:modelFor(selectedProvider()),
+		backups:process.env.AI_BACKUP_PROVIDERS||'',
+		allowlist:process.env.AI_FREE_MODEL_ALLOWLIST||'',
+	})).digest('hex');
+}
+
 async function sendRequest(provider:AiProvider,model:string,messages:AiMessage[],options:z.infer<typeof optionsSchema>):Promise<ProviderResponse>{
 	const key=await resolvedProviderKey(provider);
 	if(!key)throw new AiGatewayError(`${provider} credentials are missing.`,'NOT_CONFIGURED',503);
@@ -165,20 +183,30 @@ async function sendRequest(provider:AiProvider,model:string,messages:AiMessage[]
 	return {content:text,model:typeof data.model==='string'?data.model:model,usage:usageFrom(data.usage)};
 }
 
-async function recordUsage(provider:AiProvider,model:string,service:string,actorId:string|undefined,usage:AiUsage,latencyMs:number,result:'SUCCEEDED'|'FAILED',errorCode?:string){
+async function recordUsage(provider:AiProvider,model:string,service:string,actorId:string|undefined,usage:AiUsage,latencyMs:number,result:'SUCCEEDED'|'FAILED',errorCode?:string,cacheHit=false){
 	try{
 		await db.auditLog.create({data:{
 			...(actorId?{actorId}:{}),
 			action:result==='SUCCEEDED'?'AI_REQUEST_COMPLETED':'AI_REQUEST_FAILED',
 			entity:'AI_USAGE',
-			metadata:{provider,model,service,promptTokens:usage.promptTokens,completionTokens:usage.completionTokens,totalTokens:usage.totalTokens,latencyMs,result,...(errorCode?{errorCode}:{})},
+			metadata:{provider,model,service,promptTokens:usage.promptTokens,completionTokens:usage.completionTokens,totalTokens:usage.totalTokens,latencyMs,result,cacheHit,...(errorCode?{errorCode}:{})},
 		}});
-	}catch{}
+	}catch(error){
+		console.error('AI usage audit logging failed.',error instanceof Error?error.name:'UnknownError');
+	}
 }
 
 export async function aiChat(input:unknown,optionsInput:unknown={}):Promise<AiResult>{
 	const messages=messageSchema.parse(input);
 	const options=optionsSchema.parse(optionsInput);
+	const cacheKey=completionCacheKey(messages,options);
+	const cached=completionCache.get(cacheKey);
+	if(cached&&cached.expiresAt>Date.now()){
+		const result={...cached.result,usage:{promptTokens:null,completionTokens:null,totalTokens:null}};
+		await recordUsage(result.provider,result.model,options.service||'unspecified',options.actorId,result.usage,0,'SUCCEEDED',undefined,true);
+		return result;
+	}
+	if(cached)completionCache.delete(cacheKey);
 	const primary=selectedProvider();
 	const primaryModel=modelFor(primary);
 	const providers=[primary,...(await configuredAvailableBackups()).filter(provider=>provider!==primary)];
@@ -196,7 +224,14 @@ export async function aiChat(input:unknown,optionsInput:unknown={}):Promise<AiRe
 				result=await sendRequest(provider,model,messages,options);
 			}
 			await recordUsage(provider,result.model,options.service||'unspecified',options.actorId,result.usage,Date.now()-startedAt,'SUCCEEDED');
-			return {...result,provider};
+			const aiResult={...result,provider};
+			if(completionCache.size>=completionCacheLimit){
+				for(const [key,value] of completionCache){
+					if(value.expiresAt<=Date.now()||completionCache.size>=completionCacheLimit/2)completionCache.delete(key);
+				}
+			}
+			completionCache.set(cacheKey,{expiresAt:Date.now()+completionCacheTtlMs,result:aiResult});
+			return aiResult;
 		}catch(error){
 			lastError=error;
 			const code=error instanceof AiGatewayError?error.code:'PROVIDER_UNAVAILABLE';

@@ -8,6 +8,8 @@ import Link from 'next/link';
 import {useSession} from 'next-auth/react';
 import Nav from '@/components/Nav';
 import DisplayCurrencyPanel from '@/components/DisplayCurrencyPanel';
+import PortfolioAssistant from '@/components/PortfolioAssistant';
+import TradingJournalAssistant from '@/components/TradingJournalAssistant';
 import {useLocale} from '@/lib/i18n-context';
 import {formatUsd} from '@/lib/currency-format';
 import {filterPerformanceSnapshots,type PortfolioTimeframe} from '@/lib/portfolio-timeframes';
@@ -159,6 +161,8 @@ export default function PortfolioExperience(){
 				<div className="portfolio-metric"><span>Open position value</span><b>{money(data.positionValue)}</b></div>
 				{data.accountMode==='REAL'&&<div className="portfolio-metric"><span>Allocated investment principal</span><b>{money(data.investmentValue)}</b></div>}
 			</section>
+			<PortfolioAssistant/>
+			<TradingJournalAssistant/>
 			{data.accountMode==='REAL'&&data.positionValuationStatus!=='CURRENT'&&data.positionValuationStatus!=='NOT_APPLICABLE'&&<div className="account-callout mt-4" role="status">Fresh provider marks are unavailable for some open positions. Unverified positions are excluded from REAL account value and P/L; no internal DEMO prices are used as REAL marks.</div>}
 			{data.accountMode==='REAL'&&<section className="account-panel card mt-4 p-5">
 				<div className="account-panel-title"><div><h2>Alpaca Paper holdings</h2><p className="account-panel-subtitle">Your confirmed fills only · shown separately from the Aurevia wallet</p></div><span className="status-pill mode-real">{data.paperPositions.length} open</span></div>

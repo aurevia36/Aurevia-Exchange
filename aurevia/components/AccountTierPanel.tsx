@@ -5,6 +5,7 @@ import Link from 'next/link';
 import {useSession} from 'next-auth/react';
 import {BadgeCheck,Check,Clock3,Crown,LockKeyhole,MailCheck,ShieldCheck,Sparkles,UserRound} from 'lucide-react';
 import Nav from '@/components/Nav';
+import OnboardingAssistant from '@/components/OnboardingAssistant';
 
 type TierRequest={id:string;currentTier:number;requestedTier:number;status:string;userMessage:string|null;adminReason:string|null;createdAt:string;reviewedAt:string|null};
 type TierData={
@@ -112,6 +113,7 @@ export default function AccountTierPanel(){
 				<section className="tier-panel">
 					<div className="tier-panel-heading"><div><span>YOUR CHECKLIST</span><h2>Completed and outstanding</h2></div><ShieldCheck size={18}/></div>
 					<div className="tier-checklist">{checks.map(item=><div className={`tier-check ${item.complete?'is-done':''}`} key={item.label}><span>{item.complete?<Check size={14}/>:<Clock3 size={14}/>}</span><span>{item.label}</span>{!item.complete&&<Link href={item.href}>Complete</Link>}</div>)}</div>
+					<OnboardingAssistant/>
 					<div className="tier-panel-actions"><Link className="button-secondary" href="/settings#profile">Edit profile</Link>{data.accountMode==='REAL'&&<Link className="button-secondary" href="/kyc">Identity verification</Link>}{data.accountMode==='DEMO'&&<p>Switch to REAL mode to submit identity verification for Tier 3.</p>}</div>
 				</section>
 				<section className="tier-panel">
