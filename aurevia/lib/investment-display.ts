@@ -1,3 +1,18 @@
+export type InvestmentActivityStatus='ALL'|'PENDING_APPROVAL'|'APPROVED'|'ACTIVE'|'PAUSED'|'COMPLETED'|'REJECTED'|'CANCELLED'|'SETTLED';
+export type InvestmentActivitySort='NEWEST'|'OLDEST'|'AMOUNT';
+
+type InvestmentActivityRecord={status:string;requestedAt:string;amount:string;opportunity:{title:string;category:string}};
+
+export function filterInvestmentActivity<T extends InvestmentActivityRecord>(requests:T[],options:{query:string;status:InvestmentActivityStatus;sort:InvestmentActivitySort}):T[]{
+	const query=options.query.trim().toLowerCase();
+	const filtered=requests.filter(request=>(options.status==='ALL'||request.status===options.status)&&(!query||`${request.opportunity.title} ${request.opportunity.category} ${request.status}`.replaceAll('_',' ').toLowerCase().includes(query)));
+	return [...filtered].sort((first,second)=>{
+		if(options.sort==='AMOUNT')return (Number(second.amount)||0)-(Number(first.amount)||0);
+		const difference=new Date(first.requestedAt).getTime()-new Date(second.requestedAt).getTime();
+		return options.sort==='NEWEST'?-difference:difference;
+	});
+}
+
 export function calculateInvestmentDisplay(input:{
 	principal:number;
 	targetPayout:number;

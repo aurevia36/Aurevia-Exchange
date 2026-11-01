@@ -7,6 +7,7 @@ import Nav from '@/components/Nav';
 import {InvestmentCompletionCard,InvestmentProgressCard} from '@/components/InvestmentProgressCard';
 import {useLocale} from '@/lib/i18n-context';
 import {formatUsd} from '@/lib/currency-format';
+import {filterInvestmentActivity,type InvestmentActivitySort,type InvestmentActivityStatus} from '@/lib/investment-display';
 
 type Opportunity={id:string;title:string;category:string;description:string;assetSymbol:string|null;minimumAmount:string;maximumAmount:string|null;targetReturnPercent:string|null;durationDays:number;startsAt:string|null;maturesAt:string|null;riskLevel:string;status:string;demoEligible:boolean;realEligible:boolean;requiresApproval:boolean;targetPrice:string|null;stopPrice:string|null};
 type Request={id:string;opportunityId:string;accountMode:'DEMO'|'REAL';amount:string;status:string;requestedAt:string;activatedAt:string|null;maturesAt:string|null;settlementReference:string|null;simulatedPayout:string|null;displayTargetPayout:string|null;durationDays:number;opportunity:{title:string;category:string;riskLevel:string;targetReturnPercent:string|null;durationDays:number}};
@@ -23,6 +24,9 @@ export default function InvestmentExperience(){
  const [amounts,setAmounts]=useState<Record<string,string>>({});
  const [search,setSearch]=useState('');
  const [category,setCategory]=useState('ALL');
+ const [activitySearch,setActivitySearch]=useState('');
+ const [activityStatus,setActivityStatus]=useState<InvestmentActivityStatus>('ALL');
+ const [activitySort,setActivitySort]=useState<InvestmentActivitySort>('NEWEST');
  const [confirmOpportunityId,setConfirmOpportunityId]=useState('');
  const [loading,setLoading]=useState(true);
  const [busy,setBusy]=useState('');
@@ -46,6 +50,10 @@ export default function InvestmentExperience(){
   const query=search.trim().toLowerCase();
   return (data?.opportunities||[]).filter(item=>(category==='ALL'||item.category===category)&&(!query||`${item.title} ${item.category} ${item.description} ${item.assetSymbol||''}`.toLowerCase().includes(query)));
  },[category,data?.opportunities,search]);
+ const visibleRequests=useMemo(()=>filterInvestmentActivity(data?.requests||[],{query:activitySearch,status:activityStatus,sort:activitySort}),[activitySearch,activitySort,activityStatus,data?.requests]);
+ const activeRequestCount=data?.requests.filter(item=>['ACTIVE','APPROVED','PAUSED'].includes(item.status)).length||0;
+ const reviewRequestCount=data?.requests.filter(item=>item.status==='PENDING_APPROVAL').length||0;
+ const settledRequestCount=data?.requests.filter(item=>item.status==='SETTLED').length||0;
 
  useEffect(()=>{
   setData(null);setAmounts({});setConfirmOpportunityId('');setError('');setNotice('');
@@ -123,7 +131,11 @@ export default function InvestmentExperience(){
   </section>
   <section className="account-panel card p-5 mt-4"><div className="account-panel-title"><div><h2>{translate('investmentActivity')}</h2><p className="account-panel-subtitle">{translate('privateToAccountMode')}</p></div><button type="button" className="text-link" onClick={()=>void load(true)}><RefreshCw size={14}/> {translate('investmentRefresh')}</button></div>
    {data?.requests.some(item=>item.status==='ACTIVE')&&<div className="investment-live-grid">{data.requests.filter(item=>item.status==='ACTIVE').map(item=><InvestmentProgressCard key={item.id} investment={{...item,title:item.opportunity.title}}/>)}</div>}
-   {data?.requests.some(item=>item.status!=='ACTIVE')?<div className="investment-request-list">{data.requests.filter(item=>item.status!=='ACTIVE').map(item=><article className="investment-request-row" key={item.id}><div><b>{item.opportunity.title}</b><span>{item.opportunity.category} · {amount(item.amount,translate('investmentNotSet'))} · {item.accountMode}</span><small>{translate('investmentRequestStatus',{date:new Date(item.requestedAt).toLocaleString(),maturity:item.maturesAt?translate('maturityStatus',{date:new Date(item.maturesAt).toLocaleDateString()}):''})}</small>{item.simulatedPayout!==null&&<small>Payout: {amount(item.simulatedPayout,translate('investmentNotSet'))}.</small>}{item.settlementReference&&<small>{translate('referenceRecorded',{reference:item.settlementReference})}{item.accountMode==='REAL'?translate('notIndependentlyVerified'):''}</small>}{(item.status==='SETTLED'||item.status==='COMPLETED')&&<InvestmentCompletionCard investment={{...item,title:item.opportunity.title}}/>}{item.status==='SETTLED'&&<button type="button" className="text-link mt-2" onClick={()=>reinvestPrincipal(item)} disabled={!data.opportunities.some(opportunity=>opportunity.id===item.opportunityId)}>Reinvest settled payout</button>}</div><span className={`status-pill ${item.accountMode==='DEMO'?'mode-demo':'mode-real'}`}>{statusText(item.status)}</span></article>)}</div>:data?.requests.length===0&&<p className="account-empty">{translate('noInvestmentRequests')}</p>}
+    {data?.requests.length?<>
+     <div className="investment-activity-summary" aria-label="Investment activity counts"><div><b>{data.requests.length}</b><span>Total requests</span></div><div><b>{activeRequestCount}</b><span>Active or scheduled</span></div><div><b>{reviewRequestCount}</b><span>Awaiting review</span></div><div><b>{settledRequestCount}</b><span>Settled</span></div></div>
+     <div className="investment-activity-filters"><label className="account-label">Search activity<input className="input" type="search" value={activitySearch} onChange={event=>setActivitySearch(event.target.value)} placeholder="Name, category or status"/></label><label className="account-label">Status<select className="input" value={activityStatus} onChange={event=>setActivityStatus(event.target.value as InvestmentActivityStatus)}>{(['ALL','PENDING_APPROVAL','APPROVED','ACTIVE','PAUSED','COMPLETED','REJECTED','CANCELLED','SETTLED'] as const).map(status=><option key={status} value={status}>{status==='ALL'?'All statuses':statusText(status)}</option>)}</select></label><label className="account-label">Sort by<select className="input" value={activitySort} onChange={event=>setActivitySort(event.target.value as InvestmentActivitySort)}><option value="NEWEST">Newest first</option><option value="OLDEST">Oldest first</option><option value="AMOUNT">Largest amount</option></select></label></div>
+     {visibleRequests.length?<div className="investment-request-list">{visibleRequests.map(item=><article className="investment-request-row" key={item.id}><div><b>{item.opportunity.title}</b><span>{item.opportunity.category} · {amount(item.amount,translate('investmentNotSet'))} · {item.accountMode}</span><small>{translate('investmentRequestStatus',{date:new Date(item.requestedAt).toLocaleString(),maturity:item.maturesAt?translate('maturityStatus',{date:new Date(item.maturesAt).toLocaleDateString()}):''})}</small>{item.simulatedPayout!==null&&<small>Payout: {amount(item.simulatedPayout,translate('investmentNotSet'))}.</small>}{item.settlementReference&&<small>{translate('referenceRecorded',{reference:item.settlementReference})}{item.accountMode==='REAL'?translate('notIndependentlyVerified'):''}</small>}{(item.status==='SETTLED'||item.status==='COMPLETED')&&<InvestmentCompletionCard investment={{...item,title:item.opportunity.title}}/>}{item.status==='SETTLED'&&<button type="button" className="text-link mt-2" onClick={()=>reinvestPrincipal(item)} disabled={!data.opportunities.some(opportunity=>opportunity.id===item.opportunityId)}>Reinvest settled payout</button>}</div><span className={`status-pill ${item.accountMode==='DEMO'?'mode-demo':'mode-real'}`}>{statusText(item.status)}</span></article>)}</div>:<p className="account-empty" role="status">No investment activity matches these filters.</p>}
+    </>:data&&<p className="account-empty">{translate('noInvestmentRequests')}</p>}
   </section>
  </main></>;
 }

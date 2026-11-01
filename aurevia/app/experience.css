@@ -1274,6 +1274,11 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,su
 .investment-request-row>div,.portfolio-position-list>article>div,.admin-opportunity-list>article>div{display:grid;min-width:0;gap:5px}
 .investment-request-row b,.portfolio-position-list b,.admin-opportunity-list b{color:#e8ece5;font-size:12px;overflow-wrap:anywhere}
 .investment-request-row span,.portfolio-position-list span,.admin-opportunity-list span,.investment-request-row small,.admin-opportunity-list small{color:#8e9b91;font-size:10px;overflow-wrap:anywhere}
+.investment-activity-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:12px 0;padding:12px 0;border-block:1px solid var(--a-line)}
+.investment-activity-summary>div{display:grid;min-width:0;gap:4px}
+.investment-activity-summary b{color:#e8ece5;font-size:17px;font-variant-numeric:tabular-nums}
+.investment-activity-summary span{color:#8e9b91;font-size:9px}
+.investment-activity-filters{display:grid;grid-template-columns:minmax(0,1fr) minmax(150px,.55fr) minmax(150px,.55fr);gap:10px;margin:12px 0}
 .investment-live-grid{display:grid;gap:9px;margin-top:10px}
 .investment-live-card{min-width:0;padding:13px;border:1px solid rgba(212,167,44,.2);border-radius:4px;background:linear-gradient(135deg,rgba(31,52,38,.7),rgba(8,18,13,.9))}
 .investment-live-heading,.investment-live-footer{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
@@ -1290,6 +1295,7 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,su
 .investment-live-progress{height:4px;overflow:hidden;border-radius:3px;background:rgba(255,255,255,.08)}
 .investment-live-progress>span{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,#6c9b5d,#d6b45e);transition:width .4s ease}
 @media(max-width:640px){.investment-live-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:640px){.investment-activity-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.investment-activity-filters{grid-template-columns:minmax(0,1fr)}}
 @media(prefers-reduced-motion:reduce){
 	.investment-live-badge svg{animation:none}
 	.investment-live-progress>span{transition:none}
