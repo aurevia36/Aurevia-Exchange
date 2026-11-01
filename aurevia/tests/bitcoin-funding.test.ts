@@ -1,26 +1,26 @@
 import {Prisma} from '@prisma/client';
 import {describe,expect,it} from 'vitest';
 import {assertPaperBuyCollateral,normalizeBitcoinTransactionId,paperOrderCollateral,validateBitcoinDepositAmount} from '@/lib/bitcoin-funding';
-import {BITCOIN_MAINNET_NETWORK,normalizeBitcoinDepositSubmission} from '@/lib/bitcoin-deposit-submission';
+import {BITCOIN_MAINNET_NETWORK,normalizeBitcoinWithdrawalSubmission} from '@/lib/bitcoin-withdrawal-submission';
 
-describe('REAL BTC deposit validation',()=>{
-	it('stores BTC submission details against the configured mainnet destination',()=>{
-		const result=normalizeBitcoinDepositSubmission({network:BITCOIN_MAINNET_NETWORK,transactionReference:'A'.repeat(64),senderEmail:'sender@example.com',senderWalletName:'Example Wallet',senderWalletAddress:'1BoatSLRHtKNngkdXEeobR76b53LETtpyT',depositDateTime:'2026-03-08T08:30:00.000Z'},'1BoatSLRHtKNngkdXEeobR76b53LETtpyT');
+describe('REAL BTC withdrawal validation',()=>{
+	it('stores user-submitted BTC withdrawal metadata without treating it as payout confirmation',()=>{
+		const result=normalizeBitcoinWithdrawalSubmission({network:BITCOIN_MAINNET_NETWORK,transactionReference:'A'.repeat(64),senderEmail:'sender@example.com',senderWalletName:'Example Wallet',senderWalletAddress:'1BoatSLRHtKNngkdXEeobR76b53LETtpyT',transactionDateTime:'2026-03-08T08:30:00.000Z'},'1BoatSLRHtKNngkdXEeobR76b53LETtpyT');
 
 		expect(result).toEqual({
 			network:BITCOIN_MAINNET_NETWORK,
 			transactionReference:'a'.repeat(64),
 			referenceInfo:'2026-03-08T08:30:00.000Z',
 			senderInfo:'Sender email: sender@example.com\nSender wallet/provider: Example Wallet\nSender wallet address: 1BoatSLRHtKNngkdXEeobR76b53LETtpyT',
-			destinationInfo:'1BoatSLRHtKNngkdXEeobR76b53LETtpyT',
+			destinationInfo:null,
 		});
 	});
 
-	it('rejects missing network or configured address and invalid Bitcoin references',()=>{
-		expect(()=>normalizeBitcoinDepositSubmission({senderEmail:'sender@example.com'},'1BoatSLRHtKNngkdXEeobR76b53LETtpyT')).toThrow('BITCOIN_NETWORK_REQUIRED');
-		expect(()=>normalizeBitcoinDepositSubmission({network:BITCOIN_MAINNET_NETWORK},null)).toThrow('BTC_DESTINATION_NOT_CONFIGURED');
-		expect(()=>normalizeBitcoinDepositSubmission({network:BITCOIN_MAINNET_NETWORK,transactionReference:'invalid'},'1BoatSLRHtKNngkdXEeobR76b53LETtpyT')).toThrow('INVALID_BTC_TXID');
-		expect(()=>normalizeBitcoinDepositSubmission({network:BITCOIN_MAINNET_NETWORK,senderWalletAddress:'not-an-address'},'1BoatSLRHtKNngkdXEeobR76b53LETtpyT')).toThrow('INVALID_BTC_SENDER_ADDRESS');
+	it('rejects missing network or saved BTC destination and invalid Bitcoin references',()=>{
+		expect(()=>normalizeBitcoinWithdrawalSubmission({senderEmail:'sender@example.com'},'1BoatSLRHtKNngkdXEeobR76b53LETtpyT')).toThrow('BITCOIN_NETWORK_REQUIRED');
+		expect(()=>normalizeBitcoinWithdrawalSubmission({network:BITCOIN_MAINNET_NETWORK},null)).toThrow('BTC_WITHDRAWAL_DESTINATION_REQUIRED');
+		expect(()=>normalizeBitcoinWithdrawalSubmission({network:BITCOIN_MAINNET_NETWORK,transactionReference:'invalid'},'1BoatSLRHtKNngkdXEeobR76b53LETtpyT')).toThrow('INVALID_BTC_TXID');
+		expect(()=>normalizeBitcoinWithdrawalSubmission({network:BITCOIN_MAINNET_NETWORK,senderWalletAddress:'not-an-address'},'1BoatSLRHtKNngkdXEeobR76b53LETtpyT')).toThrow('INVALID_BTC_SENDER_ADDRESS');
 	});
 
 	it('normalizes only 64-character hexadecimal transaction IDs',()=>{

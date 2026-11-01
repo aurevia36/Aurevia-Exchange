@@ -14,8 +14,7 @@ import {createPrivateObjectKey,deletePrivateObject,PrivateStorageError,uploadPri
 import {getRealWithdrawableBalance} from '@/lib/real-withdrawals';
 import {decryptWithdrawalDestination} from '@/lib/withdrawal-destinations';
 import {rateLimit} from '@/lib/rate-limit';
-import {normalizeBitcoinDepositSubmission} from '@/lib/bitcoin-deposit-submission';
-import {SIMULATED_BTC_ADDRESS_SETTING} from '@/lib/config/simulated-bitcoin-address';
+import {normalizeBitcoinWithdrawalSubmission} from '@/lib/bitcoin-withdrawal-submission';
 
 const schema=z.object({
 	type:z.nativeEnum(FundingType),
@@ -28,10 +27,10 @@ const schema=z.object({
 	destinationInfo:z.string().trim().max(500).optional(),
 	beneficiaryInfo:z.string().trim().max(300).optional(),
 	network:z.string().trim().max(80).optional(),
-		senderEmail:z.string().trim().email().max(254).optional(),
-		senderWalletName:z.string().trim().max(100).optional(),
-		senderWalletAddress:z.string().trim().max(90).optional(),
-		depositDateTime:z.string().datetime({offset:true}).optional(),
+	senderEmail:z.string().trim().email().max(254).optional(),
+	senderWalletName:z.string().trim().max(100).optional(),
+	senderWalletAddress:z.string().trim().max(90).optional(),
+	transactionDateTime:z.string().datetime({offset:true}).optional(),
 	note:z.string().trim().max(500).optional(),
 	withdrawalDestinationId:z.string().min(1).max(64).optional(),
 	destinationConfirmed:z.literal(true).optional(),
@@ -110,10 +109,8 @@ export async function POST(req:Request){
 			body=await req.json();
 		}
 		const parsed=schema.parse(body);
-		const hasBitcoinFields=Boolean(parsed.network||parsed.senderEmail||parsed.senderWalletName||parsed.senderWalletAddress||parsed.depositDateTime);
-		if(parsed.type!==FundingType.DEPOSIT&&hasBitcoinFields)throw new Error('BITCOIN_DETAILS_NOT_ALLOWED');
-		const configuredBtcSetting=hasBitcoinFields?await db.systemSetting.findUnique({where:{key:SIMULATED_BTC_ADDRESS_SETTING},select:{value:true}}):null;
-		const bitcoinSubmission=normalizeBitcoinDepositSubmission({network:parsed.network,transactionReference:parsed.transactionReference,senderEmail:parsed.senderEmail,senderWalletName:parsed.senderWalletName,senderWalletAddress:parsed.senderWalletAddress,depositDateTime:parsed.depositDateTime},configuredBtcSetting?.value||null);
+		const hasBitcoinFields=Boolean(parsed.network||parsed.senderEmail||parsed.senderWalletName||parsed.senderWalletAddress||parsed.transactionDateTime||(parsed.type===FundingType.WITHDRAWAL&&parsed.transactionReference));
+		if(parsed.type!==FundingType.WITHDRAWAL&&hasBitcoinFields)throw new Error('BITCOIN_DETAILS_NOT_ALLOWED');
 		if(parsed.type===FundingType.WITHDRAWAL&&(!parsed.withdrawalDestinationId||parsed.destinationConfirmed!==true))return NextResponse.json({error:'Select a saved destination and confirm its details.'},{status:400});
 		const idempotencyKey=req.headers.get('Idempotency-Key');
 		if(!idempotencyKey||idempotencyKey.length>128)return NextResponse.json({error:'A valid idempotency key is required.'},{status:400});
@@ -140,15 +137,24 @@ export async function POST(req:Request){
 			select:{id:true,type:true,network:true,asset:true,nickname:true,countryCode:true,maskedLabel:true,ciphertext:true,iv:true,authTag:true},
 		}):null;
 		if(parsed.type===FundingType.WITHDRAWAL&&!destination)throw new Error('WITHDRAWAL_DESTINATION_REQUIRED');
-		if(destination)decryptWithdrawalDestination(destination);
+		const destinationDetails=destination?decryptWithdrawalDestination(destination):null;
+		if(hasBitcoinFields&&destinationDetails?.type!=='CRYPTOCURRENCY')throw new Error('BITCOIN_DETAILS_NOT_ALLOWED');
+		const bitcoinSubmission=hasBitcoinFields?normalizeBitcoinWithdrawalSubmission({
+			network:parsed.network,
+			transactionReference:parsed.transactionReference,
+			senderEmail:parsed.senderEmail,
+			senderWalletName:parsed.senderWalletName,
+			senderWalletAddress:parsed.senderWalletAddress,
+			transactionDateTime:parsed.transactionDateTime,
+		},destinationDetails?.type==='CRYPTOCURRENCY'&&destinationDetails.asset==='BTC'&&destinationDetails.network==='BITCOIN_MAINNET'?destinationDetails.walletAddress||null:null):null;
 		const currency='USD';
 		const amount=roundUsdAmount(parsed.amount);
 		if(amount.lte(0))throw new Error('INVALID_AMOUNT');
 		const transactionReference=bitcoinSubmission?.transactionReference||parsed.transactionReference||null;
-				const referenceInfo=bitcoinSubmission?.referenceInfo??parsed.referenceInfo??null;
-				const senderInfo=bitcoinSubmission?.senderInfo??parsed.senderInfo??null;
-				const destinationInfo=bitcoinSubmission?.destinationInfo??null;
-				const submittedNetwork=bitcoinSubmission?.network??null;
+		const referenceInfo=bitcoinSubmission?.referenceInfo??parsed.referenceInfo??null;
+		const senderInfo=bitcoinSubmission?.senderInfo??parsed.senderInfo??null;
+		const destinationInfo=bitcoinSubmission?.destinationInfo??parsed.destinationInfo??null;
+		const submittedNetwork=bitcoinSubmission?.network??null;
 
 		const result=await db.$transaction(async tx=>{
 			const activeUser=await tx.user.findUnique({where:{id:user.id},select:{accountMode:true,status:true}});
@@ -231,8 +237,8 @@ export async function POST(req:Request){
 		if(error instanceof Error&&error.message==='WITHDRAWAL_DESTINATION_ENCRYPTION_KEY_REQUIRED')return NextResponse.json({error:'Secure destination storage is not configured. Contact Aurevia support.'},{status:503});
 		if(error instanceof Error&&error.message==='WITHDRAWAL_DESTINATION_DECRYPTION_FAILED')return NextResponse.json({error:'The saved destination could not be verified. Contact Aurevia support.'},{status:503});
 		if(error&&typeof error==='object'&&'code'in error&&String(error.code)==='P2034')return NextResponse.json({error:'The account changed while submitting this request. Refresh and try again.'},{status:409});
-		const known=['IDEMPOTENCY_KEY_REUSED','PAYMENT_METHOD_UNAVAILABLE','AMOUNT_OUT_OF_RANGE','PAYMENT_INSTRUCTIONS_UNAVAILABLE','WITHDRAWAL_DESTINATION_REQUIRED','WITHDRAWAL_NETWORK_REQUIRED','INSUFFICIENT_AVAILABLE_BALANCE','DEPOSITS_DISABLED','WITHDRAWAL_DISABLED','ACCOUNT_RESTRICTED','REAL_KYC_REQUIRED','INVALID_AMOUNT','FIRST_TRADE_REQUIRED','BITCOIN_DETAILS_NOT_ALLOWED','BITCOIN_NETWORK_REQUIRED','BTC_DESTINATION_NOT_CONFIGURED','INVALID_BTC_TXID','INVALID_BTC_SENDER_ADDRESS'];
-		if(error instanceof Error&&known.includes(error.message))return NextResponse.json({error:error.message.replaceAll('_',' ').toLowerCase()},{status:error.message==='IDEMPOTENCY_KEY_REUSED'?409:error.message==='BTC_DESTINATION_NOT_CONFIGURED'?503:error.message==='DEPOSITS_DISABLED'||error.message==='ACCOUNT_RESTRICTED'||error.message==='WITHDRAWAL_DISABLED'||error.message==='REAL_KYC_REQUIRED'||error.message==='FIRST_TRADE_REQUIRED'?403:400});
+		const known=['IDEMPOTENCY_KEY_REUSED','PAYMENT_METHOD_UNAVAILABLE','AMOUNT_OUT_OF_RANGE','PAYMENT_INSTRUCTIONS_UNAVAILABLE','WITHDRAWAL_DESTINATION_REQUIRED','WITHDRAWAL_NETWORK_REQUIRED','INSUFFICIENT_AVAILABLE_BALANCE','DEPOSITS_DISABLED','WITHDRAWAL_DISABLED','ACCOUNT_RESTRICTED','REAL_KYC_REQUIRED','INVALID_AMOUNT','FIRST_TRADE_REQUIRED','BITCOIN_DETAILS_NOT_ALLOWED','BITCOIN_NETWORK_REQUIRED','BTC_WITHDRAWAL_DESTINATION_REQUIRED','INVALID_BTC_TXID','INVALID_BTC_SENDER_ADDRESS'];
+		if(error instanceof Error&&known.includes(error.message))return NextResponse.json({error:error.message.replaceAll('_',' ').toLowerCase()},{status:error.message==='IDEMPOTENCY_KEY_REUSED'?409:error.message==='DEPOSITS_DISABLED'||error.message==='ACCOUNT_RESTRICTED'||error.message==='WITHDRAWAL_DISABLED'||error.message==='REAL_KYC_REQUIRED'||error.message==='FIRST_TRADE_REQUIRED'?403:400});
 		const code=error&&typeof error==='object'&&'code' in error?String(error.code):'';
 		if(['P1001','P1002','P1017','P2021','P2022'].includes(code))return NextResponse.json({error:'Funding service is temporarily unavailable.'},{status:503});
 		console.error(`Funding request failed (${/^[A-Z0-9_]{2,32}$/.test(code)?code:error instanceof Error?error.name:'UnknownError'}).`);

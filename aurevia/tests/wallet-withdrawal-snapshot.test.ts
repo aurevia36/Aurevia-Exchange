@@ -2,7 +2,7 @@ import {AccountMode,FundingStatus,FundingType,Prisma} from '@prisma/client';
 import {beforeEach,describe,expect,it,vi} from 'vitest';
 
 const mocks=vi.hoisted(()=>({
-	requireUser:vi.fn(),userFindUnique:vi.fn(),destinationFindFirst:vi.fn(),btcSettingFindUnique:vi.fn(),transaction:vi.fn(),
+	requireUser:vi.fn(),userFindUnique:vi.fn(),destinationFindFirst:vi.fn(),transaction:vi.fn(),
 	ensureUserLedger:vi.fn(),balance:vi.fn(),roundUsdAmount:vi.fn(),getRealWithdrawableBalance:vi.fn(),
 	validateWithdrawal:vi.fn(),decryptWithdrawalDestination:vi.fn(),createNotification:vi.fn(),
 	notifyActiveAdmins:vi.fn(),sendSupportEmail:vi.fn(),rateLimit:vi.fn(),
@@ -12,7 +12,6 @@ vi.mock('@/lib/auth',()=>({requireUser:mocks.requireUser}));
 vi.mock('@/lib/db',()=>({db:{
 	user:{findUnique:mocks.userFindUnique},
 	withdrawalDestination:{findFirst:mocks.destinationFindFirst},
-	systemSetting:{findUnique:mocks.btcSettingFindUnique},
 	$transaction:mocks.transaction,
 }}));
 vi.mock('@/lib/ledger',()=>({balance:mocks.balance,ensureUserLedger:mocks.ensureUserLedger,roundUsdAmount:mocks.roundUsdAmount}));
@@ -33,6 +32,11 @@ const destination={
 	countryCode:'US',network:null,asset:null,maskedLabel:'Example Bank · account ending 3400',
 	ciphertext:'opaque-ciphertext',iv:'opaque-iv',authTag:'opaque-auth-tag',
 };
+const bitcoinDestination={
+	id:'bitcoin-destination-1',userId:'user-1',accountMode:AccountMode.REAL,type:'CRYPTOCURRENCY',nickname:'BTC wallet',
+	countryCode:'US',network:'BITCOIN_MAINNET',asset:'BTC',maskedLabel:'BTC wallet · ending tpyT',
+	ciphertext:'opaque-btc-ciphertext',iv:'opaque-btc-iv',authTag:'opaque-btc-auth-tag',
+};
 const key='dc34ab2c-2049-49bd-8a2c-6a88935552de';
 let tx:Record<string,Record<string,ReturnType<typeof vi.fn>>>;
 let storedRequest:Record<string,unknown>|null;
@@ -45,11 +49,11 @@ function request(idempotencyKey=key){
 	});
 }
 
-function bitcoinDepositRequest(network='BITCOIN_MAINNET'){
+function bitcoinWithdrawalRequest(network='BITCOIN_MAINNET'){
 	return new Request('https://aurevia.test/api/wallet',{
 		method:'POST',
-		headers:{'content-type':'application/json','Idempotency-Key':'btc-deposit-request'},
-		body:JSON.stringify({type:FundingType.DEPOSIT,amount:20,currency:'USD',transactionReference:'A'.repeat(64),network,senderEmail:'sender@example.com',senderWalletName:'Example wallet',senderWalletAddress:'1BoatSLRHtKNngkdXEeobR76b53LETtpyT',depositDateTime:'2026-03-08T08:30:00.000Z'}),
+		headers:{'content-type':'application/json','Idempotency-Key':'btc-withdrawal-request'},
+		body:JSON.stringify({type:FundingType.WITHDRAWAL,amount:20,currency:'USD',transactionReference:'A'.repeat(64),network,senderEmail:'sender@example.com',senderWalletName:'Example wallet',senderWalletAddress:'1BoatSLRHtKNngkdXEeobR76b53LETtpyT',transactionDateTime:'2026-03-08T08:30:00.000Z',withdrawalDestinationId:bitcoinDestination.id,destinationConfirmed:true}),
 	});
 }
 
@@ -59,8 +63,6 @@ beforeEach(()=>{
 	mocks.requireUser.mockResolvedValue({id:'user-1'});
 	mocks.userFindUnique.mockResolvedValue({accountMode:AccountMode.REAL,status:'ACTIVE',depositEnabled:true,withdrawalEnabled:true,accountRestricted:false});
 	mocks.destinationFindFirst.mockResolvedValue(destination);
-	mocks.destinationFindFirst.mockResolvedValue(destination);
-	mocks.btcSettingFindUnique.mockResolvedValue({value:'1BoatSLRHtKNngkdXEeobR76b53LETtpyT'});
 	mocks.ensureUserLedger.mockResolvedValue({id:'user-ledger'});
 	mocks.balance.mockResolvedValue(new Prisma.Decimal('100'));
 	mocks.roundUsdAmount.mockImplementation((value:number|string)=>new Prisma.Decimal(value));
@@ -113,8 +115,10 @@ describe('wallet withdrawal destination snapshot',()=>{
 		expect(tx.withdrawalDestinationSnapshot.create).not.toHaveBeenCalled();
 	});
 
-	it('stores validated BTC deposit metadata as a pending request without ledger posting',async()=>{
-		const response=await POST(bitcoinDepositRequest());
+	it('stores user-submitted BTC withdrawal metadata as a pending request without payout confirmation',async()=>{
+		mocks.destinationFindFirst.mockResolvedValue(bitcoinDestination);
+		mocks.decryptWithdrawalDestination.mockReturnValue({type:'CRYPTOCURRENCY',asset:'BTC',network:'BITCOIN_MAINNET',walletAddress:'1BoatSLRHtKNngkdXEeobR76b53LETtpyT'});
+		const response=await POST(bitcoinWithdrawalRequest());
 		const body=await response.json();
 
 		expect(response.status).toBe(201);
@@ -124,14 +128,36 @@ describe('wallet withdrawal destination snapshot',()=>{
 			network:'BITCOIN_MAINNET',
 			referenceInfo:'2026-03-08T08:30:00.000Z',
 			senderInfo:'Sender email: sender@example.com\nSender wallet/provider: Example wallet\nSender wallet address: 1BoatSLRHtKNngkdXEeobR76b53LETtpyT',
-			destinationInfo:'1BoatSLRHtKNngkdXEeobR76b53LETtpyT',
+			destinationInfo:null,
 		});
-		expect(mocks.ensureUserLedger).not.toHaveBeenCalled();
+		expect(body.withdrawalDestination).toMatchObject({type:'CRYPTOCURRENCY',asset:'BTC',network:'BITCOIN_MAINNET'});
 		expect(tx.fundingRequest.create).toHaveBeenCalledTimes(1);
 	});
 
-	it('rejects a BTC deposit on a network that is not configured',async()=>{
-		const response=await POST(bitcoinDepositRequest('BITCOIN_TESTNET'));
+	it('rejects BTC withdrawal details on a network other than mainnet',async()=>{
+		mocks.destinationFindFirst.mockResolvedValue(bitcoinDestination);
+		mocks.decryptWithdrawalDestination.mockReturnValue({type:'CRYPTOCURRENCY',asset:'BTC',network:'BITCOIN_MAINNET',walletAddress:'1BoatSLRHtKNngkdXEeobR76b53LETtpyT'});
+		const response=await POST(bitcoinWithdrawalRequest('BITCOIN_TESTNET'));
+
+		expect(response.status).toBe(400);
+		expect(tx.fundingRequest.create).not.toHaveBeenCalled();
+	});
+
+	it('rejects BTC metadata when the selected withdrawal destination is not cryptocurrency',async()=>{
+		mocks.decryptWithdrawalDestination.mockReturnValue({type:'BANK_TRANSFER',nickname:'Primary checking'});
+
+		const response=await POST(bitcoinWithdrawalRequest());
+
+		expect(response.status).toBe(400);
+		expect(tx.fundingRequest.create).not.toHaveBeenCalled();
+	});
+
+	it('rejects Bitcoin withdrawal metadata on deposits',async()=>{
+		const response=await POST(new Request('https://aurevia.test/api/wallet',{
+			method:'POST',
+			headers:{'content-type':'application/json','Idempotency-Key':'btc-deposit-rejected'},
+			body:JSON.stringify({type:FundingType.DEPOSIT,amount:20,currency:'USD',network:'BITCOIN_MAINNET',senderEmail:'sender@example.com'}),
+		}));
 
 		expect(response.status).toBe(400);
 		expect(tx.fundingRequest.create).not.toHaveBeenCalled();

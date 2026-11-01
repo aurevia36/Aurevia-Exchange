@@ -78,6 +78,8 @@ export default function WalletExperience(){
 	const [type,setType]=useState<'DEPOSIT'|'WITHDRAWAL'>('DEPOSIT');
 	const [withdrawalDestinationId,setWithdrawalDestinationId]=useState('');
 	const [withdrawalDestinationLabel,setWithdrawalDestinationLabel]=useState('');
+	const [withdrawalDestinationAsset,setWithdrawalDestinationAsset]=useState<string|null>(null);
+	const [withdrawalDestinationNetwork,setWithdrawalDestinationNetwork]=useState<string|null>(null);
 	const [destinationAccurate,setDestinationAccurate]=useState(false);
 	const [methodId,setMethodId]=useState('');
 	const [currency,setCurrency]=useState('USD');
@@ -86,7 +88,7 @@ export default function WalletExperience(){
 		const [senderEmail,setSenderEmail]=useState('');
 		const [senderWalletName,setSenderWalletName]=useState('');
 		const [senderWalletAddress,setSenderWalletAddress]=useState('');
-		const [depositDateTime,setDepositDateTime]=useState('');
+	const [transactionDateTime,setTransactionDateTime]=useState('');
 	const [note,setNote]=useState('');
 	const [confirming,setConfirming]=useState(false);
 	const [message,setMessage]=useState('');
@@ -114,7 +116,7 @@ export default function WalletExperience(){
 	const manualRealDeposit=type==='DEPOSIT'&&manualRealRequest;
 	const manualRealWithdrawal=type==='WITHDRAWAL'&&manualRealRequest;
 	const manualRealFunding=manualRealDeposit||manualRealWithdrawal;
-	const btcSubmissionEnabled=manualRealDeposit&&Boolean(btcAddress)&&!btcAddressSkipped;
+	const btcWithdrawalSubmissionEnabled=manualRealWithdrawal&&withdrawalDestinationAsset==='BTC'&&withdrawalDestinationNetwork==='BITCOIN_MAINNET';
 	const currentBalanceRecord=data.balances.find(item=>item.currency===currency);
 	const currentBalance=currentBalanceRecord?Number(currentBalanceRecord.balance):null;
 	const pendingWithdrawal=useMemo(()=>data.transactions.filter(item=>item.type==='WITHDRAWAL'&&item.currency===currency&&reserves.includes(item.status)).reduce((sum,item)=>sum+Number(item.amount),0),[data.transactions,currency]);
@@ -213,7 +215,7 @@ export default function WalletExperience(){
 		setMethods([]);setMethodId('');setFundingStatus('NOT_CONFIGURED');setRealFundingAvailable(false);setRealWithdrawalAvailable(false);setManualDepositReviewAvailable(false);setBtcAddress(null);setBtcAddressSkipped(false);setBtcAddressNotice('');setProfile(null);setMethodLoadError('');setProfileLoadError('');setHasWalletData(false);setSubmittedReceipt(null);setAmount('');setTransactionReference('');setNote('');setProofFile(null);setIdempotencyKey('');setKeyFingerprint('');setConfirming(false);setMessage('');setReceiptFiles({});
 		void load(true);
 	},[sessionStatus,activeMode,load]);
-		useEffect(()=>{setSenderEmail('');setSenderWalletName('');setSenderWalletAddress('');setDepositDateTime('')},[activeMode,session?.user?.id,submittedReceipt?.id]);
+		useEffect(()=>{setSenderEmail('');setSenderWalletName('');setSenderWalletAddress('');setTransactionDateTime('')},[activeMode,session?.user?.id,submittedReceipt?.id]);
 	useEffect(()=>{
 		const requested=searchParams.get('action')||searchParams.get('type');
 		if(requested==='DEPOSIT'||requested==='WITHDRAWAL'){
@@ -250,7 +252,7 @@ export default function WalletExperience(){
 	async function confirmSubmit(){
 		if((!selectedMethod&&!manualRealFunding)||submitting)return;
 		setSubmitting(true);setError('');
-		const payload={type,amount:Number(amount),currency:'USD',transactionReference:transactionReference||undefined,note:note||undefined,...(btcSubmissionEnabled?{network:'BITCOIN_MAINNET',senderEmail:senderEmail||undefined,senderWalletName:senderWalletName||undefined,senderWalletAddress:senderWalletAddress||undefined,depositDateTime:depositDateTime?new Date(depositDateTime).toISOString():undefined}:{}),...(type==='WITHDRAWAL'?{withdrawalDestinationId,destinationConfirmed:true as const}:{})};
+		const payload={type,amount:Number(amount),currency:'USD',transactionReference:transactionReference||undefined,note:note||undefined,...(btcWithdrawalSubmissionEnabled?{network:'BITCOIN_MAINNET',senderEmail:senderEmail||undefined,senderWalletName:senderWalletName||undefined,senderWalletAddress:senderWalletAddress||undefined,transactionDateTime:transactionDateTime?new Date(transactionDateTime).toISOString():undefined}:{}),...(type==='WITHDRAWAL'?{withdrawalDestinationId,destinationConfirmed:true as const}:{})};
 		const fingerprint=JSON.stringify(payload);
 		const key=idempotencyKey&&keyFingerprint===fingerprint?idempotencyKey:window.crypto.randomUUID();setIdempotencyKey(key);setKeyFingerprint(fingerprint);
 		try{
@@ -398,7 +400,7 @@ export default function WalletExperience(){
 			<section className="account-panel card p-5"><div className="account-panel-title"><div><h2>{translate('fundingRequest')}</h2><p className="account-panel-subtitle">{translate('fundingRequestSubtitle')}</p></div><WalletCards size={18} className="gold" aria-hidden="true"/></div>
 				{data.accountMode==='DEMO'?<div className="account-callout account-mode-notice mt-4" role="status">Deposits and withdrawals are available in REAL Mode only.</div>:<>
 				<div className="account-callout account-mode-notice mt-4" role="status"><span><strong>{type==='DEPOSIT'?'Internal REAL ledger credit request':'REAL withdrawal request'}</strong><br/>{type==='DEPOSIT'?'This workflow records requests only in Aurevia’s ledger; no external payment is processed.':'A withdrawal is reserved during review. Approval does not initiate or confirm payment; the ledger is debited only after an administrator records an actual processing reference.'} References and attachments, if provided, are user-submitted information and are not independently verified.</span></div>
-				<div className="wallet-type-switch" role="group" aria-label={translate('fundingRequestType')}><button type="button" aria-pressed={type==='DEPOSIT'} onClick={()=>{setType('DEPOSIT');setConfirming(false);setBtcAddressNotice('')}}><ArrowDownLeft size={15}/> {translate('deposit')}</button><button type="button" aria-pressed={type==='WITHDRAWAL'} onClick={()=>{setType('WITHDRAWAL');setConfirming(false);setBtcAddressNotice('')}}><ArrowUpRight size={15}/> {translate('withdrawal')}</button></div>
+				<div className="wallet-type-switch" role="group" aria-label={translate('fundingRequestType')}><button type="button" aria-pressed={type==='DEPOSIT'} onClick={()=>{setType('DEPOSIT');setConfirming(false);setTransactionReference('');setSenderEmail('');setSenderWalletName('');setSenderWalletAddress('');setTransactionDateTime('');setBtcAddressNotice('');setWithdrawalDestinationId('');setWithdrawalDestinationLabel('');setWithdrawalDestinationAsset(null);setWithdrawalDestinationNetwork(null);setDestinationAccurate(false)}}><ArrowDownLeft size={15}/> {translate('deposit')}</button><button type="button" aria-pressed={type==='WITHDRAWAL'} onClick={()=>{setType('WITHDRAWAL');setConfirming(false);setTransactionReference('');setSenderEmail('');setSenderWalletName('');setSenderWalletAddress('');setTransactionDateTime('');setBtcAddressNotice('')}}><ArrowUpRight size={15}/> {translate('withdrawal')}</button></div>
 				{manualRealDeposit&&btcAddress&&<section className="btc-address-panel" aria-label="Optional BTC address">
 					{btcAddressSkipped?<button type="button" className="btc-address-show" onClick={()=>setBtcAddressSkipped(false)}>Show optional BTC address</button>:<>
 						<div className="btc-address-heading"><div><h3>BTC address <span>BITCOIN MAINNET</span></h3><p>Administrator-configured display address only. Skip it to continue with a plain internal USD request.</p></div><button type="button" className="btc-address-skip" onClick={()=>{setBtcAddressSkipped(true);setBtcAddressNotice('')}} aria-label="Skip BTC address"><X size={15}/> Skip</button></div>
@@ -407,22 +409,26 @@ export default function WalletExperience(){
 						{btcAddressNotice&&<p className="btc-address-feedback" role="status">{btcAddressNotice.includes('copied')?<Check size={13}/>:null}{btcAddressNotice}</p>}
 					</>}
 				</section>}
-				{manualRealWithdrawal&&<div className="mt-4"><WithdrawalDestinationPanel selectedId={withdrawalDestinationId} onSelect={(id,label)=>{setWithdrawalDestinationId(id);setWithdrawalDestinationLabel(label||'');setDestinationAccurate(false)}} disabled={submitting||loading}/><label className="mt-3 flex items-start gap-2 text-xs leading-5"><input type="checkbox" className="mt-1" checked={destinationAccurate} onChange={event=>setDestinationAccurate(event.target.checked)} disabled={!withdrawalDestinationId||submitting}/><span>I confirm the destination details are accurate and belong to the intended beneficiary. This is not account-ownership verification.</span></label></div>}
+				{manualRealWithdrawal&&<div className="mt-4"><WithdrawalDestinationPanel selectedId={withdrawalDestinationId} onSelect={(id,label,asset,network)=>{setWithdrawalDestinationId(id);setWithdrawalDestinationLabel(label||'');setWithdrawalDestinationAsset(asset||null);setWithdrawalDestinationNetwork(network||null);setDestinationAccurate(false)}} disabled={submitting||loading}/><label className="mt-3 flex items-start gap-2 text-xs leading-5"><input type="checkbox" className="mt-1" checked={destinationAccurate} onChange={event=>setDestinationAccurate(event.target.checked)} disabled={!withdrawalDestinationId||submitting}/><span>I confirm the destination details are accurate and belong to the intended beneficiary. This is not account-ownership verification.</span></label></div>}
 				<form onSubmit={submit} className="mt-4 space-y-4">
 					{(selectedMethod||manualRealFunding)&&<>
 						<label className="account-label">{translate('amount',{currency:'USD'})}<input className="input" type="number" min="0.01" max="100000000" step="0.01" inputMode="decimal" required value={amount} onChange={event=>setAmount(event.target.value)} placeholder="0.00"/></label>
 						{type==='DEPOSIT'?<>
 							{amount&&Number(amount)>0&&<div className="wallet-deposit-fee-preview" aria-live="polite"><span>Estimated credit after 10% fee</span><strong>{money(Math.max(0,Number(amount)-Math.round(Number(amount)*10)/100),'USD')}</strong><small>Gross request {money(Number(amount),'USD')} · fee {money(Math.round(Number(amount)*10)/100,'USD')} · final amounts are rounded to cents at approval.</small></div>}
-							<label className="account-label">{btcSubmissionEnabled?'Transaction hash (TXID) (optional)':'Request reference (optional)'}<input className="input" maxLength={180} value={transactionReference} onChange={event=>setTransactionReference(event.target.value)} placeholder={btcSubmissionEnabled?'64-character Bitcoin transaction ID':'Internal reference or context'}/></label>
-							{btcSubmissionEnabled&&<div className="grid gap-3 sm:grid-cols-2" aria-label="Bitcoin deposit information">
+							<label className="account-label">Request reference (optional)<input className="input" maxLength={180} value={transactionReference} onChange={event=>setTransactionReference(event.target.value)} placeholder="Internal reference or context"/></label>
+							<label className="account-label">Optional attachment for administrator review<input className="input" type="file" accept="image/jpeg,image/png,image/webp" aria-label="Optional supporting attachment" onChange={event=>setProofFile(event.target.files?.[0]||null)}/><small className="muted">An attachment is user-submitted information only. It is not independently verified evidence of an external payment.</small></label>
+						</>:<>
+							<div className="account-callout"><span>Available REAL balance after pending reservations: {availableBalance===null?'Unavailable':money(availableBalance,'USD')}. Funds remain reserved while the administrator reviews and processes the external payout. Fees and conversion are not configured.</span></div>
+							{btcWithdrawalSubmissionEnabled&&<div className="grid gap-3 sm:grid-cols-2" aria-label="Bitcoin withdrawal information">
 								<label className="account-label">BTC network<input className="input" value="Bitcoin mainnet (BTC)" readOnly/></label>
 								<label className="account-label">Sender email (optional)<input className="input" type="email" autoComplete="email" maxLength={254} value={senderEmail} onChange={event=>setSenderEmail(event.target.value)}/></label>
 								<label className="account-label">Sender wallet name / provider (optional)<input className="input" maxLength={100} value={senderWalletName} onChange={event=>setSenderWalletName(event.target.value)}/></label>
 								<label className="account-label">Sender wallet address (optional)<input className="input" maxLength={90} value={senderWalletAddress} onChange={event=>setSenderWalletAddress(event.target.value)}/></label>
-								<label className="account-label sm:col-span-2">Deposit date and time (optional, device local)<input className="input" type="datetime-local" value={depositDateTime} onChange={event=>setDepositDateTime(event.target.value)}/><small className="muted">The submitted value is stored as a UTC timestamp supplied by you; it is not blockchain verification.</small></label>
+								<label className="account-label sm:col-span-2">Transaction hash (TXID) (optional)<input className="input" maxLength={180} value={transactionReference} onChange={event=>setTransactionReference(event.target.value)} placeholder="64-character Bitcoin transaction ID"/></label>
+								<label className="account-label sm:col-span-2">Transaction date and time (optional, device local)<input className="input" type="datetime-local" value={transactionDateTime} onChange={event=>setTransactionDateTime(event.target.value)}/><small className="muted">Submitted as a UTC timestamp supplied by you; it is not independently verified.</small></label>
+								<p className="text-xs leading-5 muted sm:col-span-2">These details are user-submitted and do not prove that a BTC withdrawal was sent. The saved BTC destination is used for administrator review. The administrator records the outbound transaction hash only after confirming the actual external payout.</p>
 							</div>}
-							<label className="account-label">Optional attachment for administrator review<input className="input" type="file" accept="image/jpeg,image/png,image/webp" aria-label="Optional supporting attachment" onChange={event=>setProofFile(event.target.files?.[0]||null)}/><small className="muted">An attachment is user-submitted information only. It is not independently verified evidence of an external payment.</small></label>
-						</>:<div className="account-callout"><span>Available REAL balance after pending reservations: {availableBalance===null?'Unavailable':money(availableBalance,'USD')}. Funds remain reserved while the administrator reviews and processes the external payout. Fees and conversion are not configured.</span></div>}
+						</>}
 						<label className="account-label">{translate('note')}<textarea className="input min-h-20" maxLength={500} value={note} onChange={event=>setNote(event.target.value)}/></label>
 					</>}
 					{!availableMethods.length&&!manualRealFunding&&<div className="account-empty" role="status">{methodLoadError||translate('noDepositMethods',{type:type.toLowerCase()})}</div>}
