@@ -92,14 +92,14 @@ describe('canonical environment configuration',()=>{
     expect(getServerConfiguration({SUPPORT_PHONE:'+1 555 010 1234'}).smtp.supportPhone).toBe('+1 555 010 1234');
   });
 
-  it('requires email verification for registration independently of legacy flags',()=>{
-    expect(getServerConfiguration({}).verification.registrationVerificationEnabled).toBe(true);
+  it('keeps signup email verification disabled even when legacy flags are set',()=>{
+    expect(getServerConfiguration({}).verification.registrationVerificationEnabled).toBe(false);
     expect(getServerConfiguration({}).verification.appUrl).toBe('https://aurevia-exchange-6hfi.onrender.com');
     expect(getServerConfiguration({
       REGISTRATION_VERIFICATION_ENABLED:'true',
       PHONE_VERIFICATION_REQUIRED:'true',
     }).verification).toMatchObject({
-      registrationVerificationEnabled:true,
+      registrationVerificationEnabled:false,
       phoneVerificationRequired:false,
     });
   });

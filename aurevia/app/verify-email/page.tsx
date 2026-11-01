@@ -56,7 +56,7 @@ export default function VerifyEmailPage(){
 	return <><Nav/><main className="auth-scene"><section className="auth-card" aria-labelledby="verify-email-title">
 		<div className="flex items-center gap-2 gold"><ShieldCheck size={20} aria-hidden="true"/><span className="text-sm font-semibold">Email verification</span></div>
 		<h1 id="verify-email-title" className="auth-heading mt-3">Verify your email address</h1>
-		<p className="mt-2 text-sm leading-6 muted">{deliveryStatus==='retry'?'Your account was created, but we could not send the first email. Request a new code below.':'Enter the six-digit code we sent to your email.'} Email verification is required before you can sign in.</p>
+		<p className="mt-2 text-sm leading-6 muted">{deliveryStatus==='retry'?'Your account was created, but we could not send the first email. You can sign in without a verification code.':'Email verification is no longer required to register or sign in. Existing verification links can still be used if you requested one.'}</p>
 		<form onSubmit={verify} className="mt-5 space-y-4">
 			<label className="auth-field-label">Email address<input className="auth-input" type="email" autoComplete="email" value={email} onChange={event=>setEmail(event.target.value)} required maxLength={254}/></label>
 			<label className="auth-field-label">Six-digit verification code<input className="auth-input" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} value={code} onChange={event=>setCode(event.target.value.replace(/\D/g,'').slice(0,6))} required/></label>
@@ -65,6 +65,6 @@ export default function VerifyEmailPage(){
 			<button className="auth-submit w-full" type="submit" disabled={busy}>{busy?'Verifying…':'Verify email'}</button>
 		</form>
 		<button className="mt-4 text-link" type="button" disabled={busy||!email} onClick={()=>void resend()}>Resend verification code</button>
-		<p className="auth-footer mt-5">Already verified? <Link href="/login" className="auth-link">Sign in</Link></p>
+		<p className="auth-footer mt-5">Ready to continue? <Link href="/login" className="auth-link">Sign in</Link></p>
 	</section></main></>;
 }

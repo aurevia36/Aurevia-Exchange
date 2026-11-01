@@ -95,7 +95,7 @@ export async function POST(request:Request){
 		if(error instanceof Error&&error.message==='REAL_MODE_REQUIRED')return NextResponse.json({error:'Tier 3 review is available in REAL mode only.'},{status:403});
 		if(error instanceof Error&&error.message==='ACCOUNT_UNAVAILABLE')return NextResponse.json({error:'This account is unavailable.'},{status:403});
 		if(error instanceof Error&&error.message==='RATE_LIMITED')return NextResponse.json({error:'You have submitted several tier requests recently. Try again later.'},{status:429});
-		const messages:Record<string,string>={MAXIMUM_TIER:'You are already at the highest available tier.',PROFILE_INCOMPLETE:'Complete your name, country, phone number, and email verification in Profile before requesting Tier 3 review.',VERIFICATION_MISSING:'Verify your phone number, submit your identity details, and upload an identity document before requesting Tier 3 review.',REQUEST_PENDING:'A tier request is already awaiting review.'};
+		const messages:Record<string,string>={MAXIMUM_TIER:'You are already at the highest available tier.',PROFILE_INCOMPLETE:'Complete your name, country, and phone number in Profile before requesting Tier 3 review.',VERIFICATION_MISSING:'Verify your phone number, submit your identity details, and upload an identity document before requesting Tier 3 review.',REQUEST_PENDING:'A tier request is already awaiting review.'};
 		if(error instanceof Error&&messages[error.message])return NextResponse.json({error:messages[error.message]},{status:409});
 		const code=error&&typeof error==='object'&&'code' in error?String(error.code):'';
 		if(code==='P2002')return NextResponse.json({error:'A tier request is already awaiting review.'},{status:409});

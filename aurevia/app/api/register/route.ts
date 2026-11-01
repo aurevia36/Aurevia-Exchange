@@ -1,7 +1,7 @@
 import {NextResponse} from 'next/server';
 import {randomUUID} from 'node:crypto';
 import bcrypt from 'bcryptjs';
-import {AccountMode,NotificationType,Prisma,VerificationChannel} from '@prisma/client';
+import {AccountMode,NotificationType,Prisma} from '@prisma/client';
 import {z,ZodError} from 'zod';
 import {db} from '@/lib/db';
 import {ensureSystemAccount,initializePaperAccount} from '@/lib/ledger';
@@ -9,8 +9,6 @@ import {rateLimit} from '@/lib/rate-limit';
 import {createNotification} from '@/lib/notifications';
 import {notifyActiveAdmins} from '@/lib/notifications';
 import {isValidE164,parseDateOfBirth} from '@/lib/registration-validation';
-import {deliverVerificationCode,hasConfiguredVerificationProvider} from '@/lib/verification-delivery';
-import {issueVerificationCode} from '@/lib/verification';
 
 const schema=z.object({
 	email:z.string().trim().email().max(254),
@@ -31,17 +29,14 @@ export async function POST(req:Request){
 		const p=schema.parse(await req.json());
 		const email=p.email.toLowerCase();
 		rateLimit(`register-email:${email}`,3,3600000);
-		if(!hasConfiguredVerificationProvider(VerificationChannel.EMAIL))return NextResponse.json({error:'Email verification is temporarily unavailable. Please try again later.'},{status:503});
 		const dateOfBirth=parseDateOfBirth(p.dateOfBirth);
 		if(!dateOfBirth)return NextResponse.json({error:'Enter a valid date of birth that is not in the future.'},{status:400});
 		stage='hash-password';
 		const passwordHash=await bcrypt.hash(p.password,12);
 		stage='registration-transaction';
-		const registration=await db.$transaction(async tx=>{
+		await db.$transaction(async tx=>{
 			stage='create-user';
-			const created=await tx.user.create({data:{email,passwordHash,name:p.name,country:p.country,phone:p.phone||null,accountMode:p.accountMode,requiresRegistrationVerification:true,termsAcceptedAt:new Date()}});
-			stage='create-email-verification';
-			const verification=await issueVerificationCode(tx,created,VerificationChannel.EMAIL);
+			const created=await tx.user.create({data:{email,passwordHash,name:p.name,country:p.country,phone:p.phone||null,accountMode:p.accountMode,requiresRegistrationVerification:false,termsAcceptedAt:new Date()}});
 			stage='link-waitlist';
 			await tx.waitlistEntry.updateMany({where:{email, userId:null},data:{userId:created.id,status:'REGISTERED',updatedAt:new Date()}});
 			stage='save-kyc-profile';
@@ -52,19 +47,12 @@ export async function POST(req:Request){
 			stage='initialize-system-account';
 			await ensureSystemAccount(tx,'SYSTEM:LIABILITY','Customer Funds');
 			stage='create-user-notification';
-			await createNotification(tx,{userId:created.id,type:NotificationType.ACCOUNT,title:'Verify your email address',message:'Your account was created. Verify your email address before signing in.',dedupeKey:`registration:${created.id}:created`,actionUrl:'/verify-email'});
+			await createNotification(tx,{userId:created.id,type:NotificationType.ACCOUNT,title:'Welcome to Aurevia Exchange',message:'Your account is ready. You can sign in now; identity review remains separate for eligible account services.',dedupeKey:`registration:${created.id}:created`,actionUrl:'/login'});
 			stage='notify-active-admins';
 			await notifyActiveAdmins(tx,{type:NotificationType.ACCOUNT,title:'New account registration',message:`A new ${created.accountMode.toLowerCase()} account registration is awaiting review.`,dedupeKey:`registration:${created.id}:admin`,relatedEntity:'USER',relatedId:created.id,actionUrl:'/admin'});
-			return {user:created,verification};
+			return created;
 		},{maxWait:10000,timeout:15000});
-		stage='send-email-verification';
-		const delivered=await deliverVerificationCode(VerificationChannel.EMAIL,registration.user,registration.verification.code);
-		if(!delivered){
-			await db.verificationCode.deleteMany({where:{userId:registration.user.id,codeHash:registration.verification.codeHash}});
-			console.error('Registration verification email delivery failed.',{requestId});
-			return NextResponse.json({message:'Your account was created, but the verification email could not be sent. Request a new code to try again.',verificationRequired:true,delivery:'failed',authMethod:'credentials'},{status:201});
-		}
-		return NextResponse.json({message:'Account created. Check your email for a verification code before signing in.',verificationRequired:true,delivery:'sent',authMethod:'credentials'},{status:201});
+		return NextResponse.json({message:'Account created. You can sign in now.',verificationRequired:false,authMethod:'credentials'},{status:201});
 	}catch(error){
 		if(error instanceof ZodError){
 			if(error.issues.some(issue=>issue.path[0]==='dateOfBirth'))return NextResponse.json({error:'Enter a valid date of birth that is not in the future.'},{status:400});

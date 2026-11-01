@@ -10,13 +10,13 @@ import OnboardingAssistant from '@/components/OnboardingAssistant';
 type TierRequest={id:string;currentTier:number;requestedTier:number;status:string;userMessage:string|null;adminReason:string|null;createdAt:string;reviewedAt:string|null};
 type TierData={
 	tier:string;currentTier:number;progress:number;accountMode:'DEMO'|'REAL';canRequest:boolean;
-	requirements:{emailVerified:boolean;nameComplete:boolean;countryComplete:boolean;phoneComplete:boolean;phoneVerified:boolean;profileComplete:boolean;verificationSubmitted:boolean;identityDocumentUploaded:boolean;identityDocumentApproved:boolean;identityApproved:boolean};
+	requirements:{nameComplete:boolean;countryComplete:boolean;phoneComplete:boolean;phoneVerified:boolean;profileComplete:boolean;verificationSubmitted:boolean;identityDocumentUploaded:boolean;identityDocumentApproved:boolean;identityApproved:boolean};
 	permissions:{basicAccountAccess:boolean;profileManagement:boolean;identityVerification:boolean;tierBenefits:boolean;verifiedAccount:boolean;realMoneyServices:boolean};
 	requests:TierRequest[];
 };
 const tiers=[
 	{number:1,title:'Registered account',icon:UserRound,description:'Sign in, use your dashboard, and access basic account features.'},
-	{number:2,title:'Completed profile',icon:Sparkles,description:'Unlock Tier 2 automatically after email, profile, and phone details are complete.'},
+	{number:2,title:'Completed profile',icon:Sparkles,description:'Unlock Tier 2 automatically after your profile and phone details are complete.'},
 	{number:3,title:'Verified account',icon:Crown,description:'Submit identity details and receive administrator approval.'},
 ];
 
@@ -71,7 +71,6 @@ export default function AccountTierPanel(){
 	const latest=data?.requests[0];
 	const requirements=data?.requirements;
 	const checks=[
-		{label:'Email address verified',complete:requirements?.emailVerified,href:`/verify-email?email=${encodeURIComponent(session?.user?.email||'')}`},
 		{label:'Full name provided',complete:requirements?.nameComplete,href:'/settings#profile'},
 		{label:'Country selected',complete:requirements?.countryComplete,href:'/settings#profile'},
 		{label:'Valid phone number added',complete:requirements?.phoneComplete,href:'/settings#profile'},

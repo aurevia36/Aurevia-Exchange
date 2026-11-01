@@ -28,10 +28,10 @@ describe('production account policy',()=>{
     expect(getAccountTier({accountMode:AccountMode.DEMO,kycStatus:KycStatus.PENDING,verificationDocuments:0,verificationSubmitted:false,phoneVerified:false,profileComplete:false}).label).toBe('TIER 1');
   });
 
-  it('requires verified email and complete profile fields before Tier 2 eligibility',()=>{
-    expect(getTierProfileRequirements({name:'Ada User',country:'US',phone:'+14155552671',requiresRegistrationVerification:false})).toMatchObject({emailVerified:true,profileComplete:true});
-    expect(getTierProfileRequirements({name:'Ada User',country:'US',phone:'+14155552671',requiresRegistrationVerification:true}).profileComplete).toBe(false);
-    expect(getTierProfileRequirements({name:'A',country:'',phone:'555',requiresRegistrationVerification:false}).profileComplete).toBe(false);
+  it('requires profile fields but not email verification before Tier 2 eligibility',()=>{
+    expect(getTierProfileRequirements({name:'Ada User',country:'US',phone:'+14155552671'})).toMatchObject({profileComplete:true});
+    expect(getTierProfileRequirements({name:'Ada User',country:'US',phone:'+14155552671'})).not.toHaveProperty('emailVerified');
+    expect(getTierProfileRequirements({name:'A',country:'',phone:'555'}).profileComplete).toBe(false);
   });
 
   it('rejects stale tier reviews and requires approved identity evidence for Tier 3',()=>{

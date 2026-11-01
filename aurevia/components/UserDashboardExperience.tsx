@@ -20,7 +20,7 @@ import {DEFAULT_WATCHLIST,MARKET_ASSETS,MARKET_UI_REFRESH_INTERVAL_MS,type Marke
 import {formatUsd} from '@/lib/currency-format';
 
 type Overview={
-	profile:{name:string|null;accountMode:'DEMO'|'REAL';tier:string;progress:number;profileRequirements:{emailVerified:boolean;nameComplete:boolean;countryComplete:boolean;phoneComplete:boolean;profileComplete:boolean};kycStatus:string;hasAvatar:boolean};
+	profile:{name:string|null;accountMode:'DEMO'|'REAL';tier:string;progress:number;profileRequirements:{nameComplete:boolean;countryComplete:boolean;phoneComplete:boolean;profileComplete:boolean};kycStatus:string;hasAvatar:boolean};
 	accountMode:'DEMO'|'REAL';
 	demoStartingBalance:string|null;
 	balances:Partial<Record<'DEMO'|'REAL',string>>;

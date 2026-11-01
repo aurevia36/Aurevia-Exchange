@@ -38,7 +38,7 @@ beforeEach(()=>{
 	});
 	mocks.tierRequestFindFirst.mockResolvedValue(null);
 	mocks.auditCreate.mockResolvedValue({});
-	mocks.getRequirements.mockReturnValue({emailVerified:true,nameComplete:false,countryComplete:false,phoneComplete:false,profileComplete:false});
+	mocks.getRequirements.mockReturnValue({nameComplete:false,countryComplete:false,phoneComplete:false,profileComplete:false});
 	mocks.getAccountTier.mockReturnValue({label:'TIER 1',progress:33});
 	mocks.runAiService.mockResolvedValue({
 		content:JSON.stringify({summary:'Complete your profile details to progress through the account checklist.',caveat:'KYC and tier changes follow the normal administrator-reviewed workflow.'}),
@@ -68,7 +68,7 @@ describe('smart onboarding assistant',()=>{
 			email:'member@example.test',name:'Member Name',country:'US',phone:'+12025550123',phoneVerified:true,
 			requiresRegistrationVerification:false,kyc:{submittedAt:new Date()},kycDocuments:[{status:'SUBMITTED'}],
 		});
-		mocks.getRequirements.mockReturnValue({emailVerified:true,nameComplete:true,countryComplete:true,phoneComplete:true,profileComplete:true});
+		mocks.getRequirements.mockReturnValue({nameComplete:true,countryComplete:true,phoneComplete:true,profileComplete:true});
 		mocks.getAccountTier.mockReturnValue({label:'TIER 2',progress:67});
 
 		const response=await POST();

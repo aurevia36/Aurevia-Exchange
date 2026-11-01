@@ -781,10 +781,9 @@ test('sign-in password visibility, recovery link, and account link are accessibl
 	await expectNoHorizontalOverflow(page);
 });
 
-test('registration requires email verification before sign-in',async({page})=>{
+test('registration is free and does not require email verification before sign-in',async({page})=>{
 	const email=fixture('REGISTRATION_EMAIL');
 	const password=fixture('REGISTRATION_PASSWORD');
-	await page.request.post(`${providerOrigin}/reset`);
 	await page.goto('/register');
 	await expect(page.getByRole('heading',{name:'Open an account'})).toBeVisible();
 	await expect(page.getByRole('radio',{name:/DEMO ACCOUNT/})).toBeVisible();
@@ -817,17 +816,13 @@ test('registration requires email verification before sign-in',async({page})=>{
 	await page.getByRole('button',{name:'Create account'}).click();
 	const registrationPayload=(await registrationRequest).postDataJSON();
 	expect(registrationPayload).toMatchObject({name:'Temporary Browser Test',country:'United States',phone:'+447400123456',dateOfBirth:'2000-02-29'});
-	expect(await (await registrationResponse).json()).toMatchObject({verificationRequired:true,authMethod:'credentials'});
-	await expect(page).toHaveURL(new RegExp(`/verify-email\\?email=${encodeURIComponent(email)}`));
-	expect(await db.user.findUniqueOrThrow({where:{email},select:{requiresRegistrationVerification:true}})).toEqual({requiresRegistrationVerification:true});
-	expect(await db.verificationCode.count({where:{user:{email},channel:'EMAIL'}})).toBe(1);
+	expect(await (await registrationResponse).json()).toMatchObject({verificationRequired:false,authMethod:'credentials'});
+	await expect(page).toHaveURL('/login?registered=1');
+	expect(await db.user.findUniqueOrThrow({where:{email},select:{requiresRegistrationVerification:true}})).toEqual({requiresRegistrationVerification:false});
+	expect(await db.verificationCode.count({where:{user:{email},channel:'EMAIL'}})).toBe(0);
 	const providerStats=await page.request.get(`${providerOrigin}/stats`);
-	expect(await providerStats.json()).toMatchObject({email:1,sms:0});
-	const emailCode=await page.request.get(`${providerOrigin}/test-code?email=${encodeURIComponent(email)}`).then(response=>response.json());
-	await page.getByLabel('Six-digit verification code').fill(emailCode.code);
-	await page.getByRole('button',{name:'Verify email'}).click();
-	await expect(page).toHaveURL('/login?verified=1');
-	expect(await db.user.findUniqueOrThrow({where:{email},select:{requiresRegistrationVerification:true,verifiedAt:true}})).toMatchObject({requiresRegistrationVerification:false,verifiedAt:expect.any(Date)});
+	expect(await providerStats.json()).toMatchObject({email:0,sms:0});
+	expect(await db.user.findUniqueOrThrow({where:{email},select:{requiresRegistrationVerification:true,verifiedAt:true}})).toEqual({requiresRegistrationVerification:false,verifiedAt:null});
 	await page.getByLabel('Email or administrator username').fill(email);
 	await page.getByLabel('Password',{exact:true}).fill(password);
 	await page.getByRole('button',{name:'Sign in'}).click();

@@ -3,7 +3,6 @@ import {isValidE164} from '@/lib/registration-validation';
 
 export type AccountTier='TIER 1'|'TIER 2'|'TIER 3';
 export type TierProfileRequirements={
-	emailVerified:boolean;
 	nameComplete:boolean;
 	countryComplete:boolean;
 	phoneComplete:boolean;
@@ -22,12 +21,11 @@ export function validateDepositApproval(requestedAmount:string|number,creditedAm
 	return {requestedAmount:request.toString(),creditedAmount:credit.toString(),feeAmount:fee.toString()};
 }
 
-export function getTierProfileRequirements(input:{name:string|null;country:string|null;phone:string|null;requiresRegistrationVerification:boolean}):TierProfileRequirements{
-	const emailVerified=!input.requiresRegistrationVerification;
+export function getTierProfileRequirements(input:{name:string|null;country:string|null;phone:string|null}):TierProfileRequirements{
 	const nameComplete=Boolean(input.name?.trim()&&input.name.trim().length>=2);
 	const countryComplete=Boolean(input.country?.trim()&&input.country.trim().length>=2);
 	const phoneComplete=Boolean(input.phone&&isValidE164(input.phone));
-	return {emailVerified,nameComplete,countryComplete,phoneComplete,profileComplete:emailVerified&&nameComplete&&countryComplete&&phoneComplete};
+	return {nameComplete,countryComplete,phoneComplete,profileComplete:nameComplete&&countryComplete&&phoneComplete};
 }
 
 export function getAccountTier(context:TierContext):{label:AccountTier;progress:number;eligibleForRealTrading:boolean;verified:boolean}{

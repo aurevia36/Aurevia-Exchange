@@ -210,7 +210,7 @@ export function getServerConfiguration(source: EnvironmentSource = process.env):
       smsApiUrl: env('VERIFICATION_SMS_API_URL', source),
       smsApiKey: env('VERIFICATION_SMS_API_KEY', source),
       appUrl: cleanUrl(env('NEXT_PUBLIC_APP_URL', source) || env('NEXTAUTH_URL', source) || env('RENDER_EXTERNAL_URL', source) || 'https://aurevia-exchange-6hfi.onrender.com'),
-      registrationVerificationEnabled: true,
+      registrationVerificationEnabled: false,
       phoneVerificationRequired: false,
       configured: verificationEmailConfigured || verificationSmsConfigured,
     },

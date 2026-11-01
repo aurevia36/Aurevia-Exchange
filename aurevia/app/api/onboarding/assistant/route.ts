@@ -18,7 +18,6 @@ type OnboardingStep={id:string;title:string;href:string};
 
 function getOnboardingSteps(input:{
 	accountMode:AccountMode;
-	email:string;
 	requirements:ReturnType<typeof getTierProfileRequirements>;
 	phoneVerified:boolean;
 	kycStatus:string;
@@ -28,7 +27,6 @@ function getOnboardingSteps(input:{
 	tierRequestStatus:string|null;
 }):OnboardingStep[]{
 	const steps:OnboardingStep[]=[];
-	if(!input.requirements.emailVerified)steps.push({id:'verify_email',title:'Verify your email address',href:`/verify-email?email=${encodeURIComponent(input.email)}`});
 	if(!input.requirements.nameComplete)steps.push({id:'complete_name',title:'Add your full name',href:'/settings#profile'});
 	if(!input.requirements.countryComplete)steps.push({id:'select_country',title:'Select your country',href:'/settings#profile'});
 	if(!input.requirements.phoneComplete)steps.push({id:'add_phone',title:'Add a valid phone number',href:'/settings#profile'});
@@ -62,7 +60,7 @@ export async function POST(){
 		const profile=await db.user.findUnique({
 			where:{id:user.id},
 			select:{
-				role:true,status:true,accountMode:true,approvedTier:true,kycStatus:true,email:true,name:true,country:true,phone:true,
+				role:true,status:true,accountMode:true,approvedTier:true,kycStatus:true,name:true,country:true,phone:true,
 				phoneVerified:true,requiresRegistrationVerification:true,kyc:{select:{submittedAt:true}},
 				kycDocuments:{where:{kind:'IDENTITY_DOCUMENT'},select:{status:true}},
 			},
@@ -86,7 +84,6 @@ export async function POST(){
 		});
 		const steps=getOnboardingSteps({
 			accountMode:profile.accountMode,
-			email:profile.email,
 			requirements,
 			phoneVerified:profile.phoneVerified,
 			kycStatus:profile.kycStatus,
